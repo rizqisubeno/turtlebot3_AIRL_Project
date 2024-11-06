@@ -1,0 +1,11 @@
+pyzmq
+numpy
+matplotlib
+torch
+tensorboard
+gymnasium
+stable-baselines3
+sb3_contrib
+imitation
+google-api-python-client
+
