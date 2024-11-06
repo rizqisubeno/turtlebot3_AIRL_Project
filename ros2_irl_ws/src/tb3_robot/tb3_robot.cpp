@@ -629,7 +629,14 @@ public:
                     {
                         if (std::isinf(raw_lidar_data[i]))
                         {
-                            raw_lidar_data[i] = 0.000;
+                            if(std::isinf(raw_lidar_data[i-1])==false and std::isinf(raw_lidar_data[i+1]==false))
+                            {
+                                raw_lidar_data[i] = (raw_lidar_data[i-1]+raw_lidar_data[i+1])/2.0f;
+                            }
+                            else
+                            {
+                                raw_lidar_data[i] = 0.000;
+                            }
                         }
                         temp_data.push_back(raw_lidar_data[temp]);
                     }

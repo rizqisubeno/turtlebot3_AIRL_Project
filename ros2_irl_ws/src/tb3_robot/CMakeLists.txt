@@ -18,11 +18,13 @@ find_package(tf2_geometry_msgs REQUIRED)
 
 # Find Protobuf
 #find_package(Protobuf REQUIRED)
+#find_package( absl REQUIRED )
 include(FindProtobuf)
-find_package(protobuf REQUIRED)
+find_package(Protobuf REQUIRED)
 include_directories(${Protobuf_INCLUDE_DIRS})
 #message("${Protobuf_LIBRARIES}")
 #message("${Protobuf_INCLUDE_DIRS}")
+
 # Find the ZeroMQ package
 find_package(PkgConfig REQUIRED)
 pkg_check_modules(ZMQ REQUIRED libzmq)
