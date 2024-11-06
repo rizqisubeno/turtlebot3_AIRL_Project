@@ -1,0 +1,603 @@
+#VRML_SIM R2023b utf8
+
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackground.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/backgrounds/protos/TexturedBackgroundLight.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/robots/robotis/turtlebot/protos/TurtleBot3Burger.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/containers/protos/WoodenBox.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/factory/containers/protos/CardboardBox.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/panels/protos/Panel.proto"
+EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/RoughPolymer.proto"
+EXTERNPROTO "../protos/RobotisLds01.proto"
+
+DEF WorldInfo WorldInfo {
+  title "Amazon_Warehouse"
+}
+Viewpoint {
+  orientation -0.0003373094603152355 0.9999998317776199 0.0004718761067522264 1.2495493150017964
+  position -2.947573614583498 -0.42317578298491365 10.777542433492457
+  follow "TurtleBot3Burger"
+  followType "Pan and Tilt Shot"
+}
+DEF Ground Solid {
+  rotation 0 -1 0 -5.307179586466759e-06
+  children [
+    Transform {
+      scale 0.375 0.375 1
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_GroundB_01/meshes/aws_robomaker_warehouse_GroundB_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  boundingObject Box {
+    size 5.243 7.84 0.249
+  }
+}
+DEF Trash Solid {
+  translation -0.68 2.91 0.11
+  children [
+    Transform {
+      scale 0.375 0.375 0.375
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_TrashCanC_01/meshes/aws_robomaker_warehouse_TrashCanC_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  name "solid(19)"
+  boundingObject Mesh {
+    url [
+      "../3d files/scaled/aws_robomaker_warehouse_TrashCanC_01/meshes/aws_robomaker_warehouse_TrashCanC_01_collision.dae"
+      ""
+      ""
+      ""
+    ]
+  }
+}
+DEF Wall Solid {
+  translation 0 0 0.12
+  children [
+    Transform {
+      scale 0.375 0.375 0.375
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_WallB_01/meshes/aws_robomaker_warehouse_WallB_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  name "solid(1)"
+  boundingObject Mesh {
+    url [
+      "../3d files/scaled/aws_robomaker_warehouse_WallB_01/meshes/aws_robomaker_warehouse_WallB_01_collision.dae"
+    ]
+  }
+}
+DEF Big_Shelf Solid {
+  translation -2.1 -0.25 0.12
+  children [
+    Transform {
+      translation 0.04 -0.02 0
+      scale 0.375 0.375 0.375
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_ShelfF_01/meshes/aws_robomaker_warehouse_ShelfF_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  name "solid(2)"
+  boundingObject Mesh {
+    url [
+      "../3d files/scaled/aws_robomaker_warehouse_ShelfF_01/meshes/aws_robomaker_warehouse_ShelfF_01_collision.dae"
+    ]
+  }
+}
+DEF Medium_Shelf1 Solid {
+  translation 1.7 0.4 -0.71
+  children [
+    Transform {
+      translation 0 -0.005 0.819
+      scale 0.375 0.375 0.375
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_ShelfE_01/meshes/aws_robomaker_warehouse_ShelfE_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  name "solid(3)"
+  boundingObject Mesh {
+    url [
+      "../3d files/scaled/aws_robomaker_warehouse_ShelfE_01/meshes/aws_robomaker_warehouse_ShelfE_01_collision.dae"
+    ]
+  }
+}
+Panel {
+  translation 0.976 0.23 0.125
+  size 0.02 0.327 0.26
+  appearance RoughPolymer {
+    baseColor 1 1 0
+  }
+  borderAppearance RoughPolymer {
+    baseColor 1 1 0
+  }
+}
+Panel {
+  translation 1.706 0.23 0.125
+  name "panel(1)"
+  size 0.02 0.327 0.26
+  appearance RoughPolymer {
+    baseColor 1 1 0
+  }
+  borderAppearance RoughPolymer {
+    baseColor 1 1 0
+  }
+}
+Panel {
+  translation 2.425 0.23 0.125
+  name "panel(2)"
+  size 0.02 0.327 0.26
+  appearance RoughPolymer {
+    baseColor 1 1 0
+  }
+  borderAppearance RoughPolymer {
+    baseColor 1 1 0
+  }
+}
+Panel {
+  translation 2.425 -0.77 0.125
+  name "panel(3)"
+  size 0.02 0.327 0.26
+  appearance RoughPolymer {
+    baseColor 1 1 0
+  }
+  borderAppearance RoughPolymer {
+    baseColor 1 1 0
+  }
+}
+Panel {
+  translation 2.425 -1.77 0.125
+  name "panel(6)"
+  size 0.02 0.327 0.26
+  appearance RoughPolymer {
+    baseColor 1 1 0
+  }
+  borderAppearance RoughPolymer {
+    baseColor 1 1 0
+  }
+}
+Panel {
+  translation 2.425 -2.77 0.125
+  name "panel(7)"
+  size 0.02 0.327 0.26
+  appearance RoughPolymer {
+    baseColor 1 1 0
+  }
+  borderAppearance RoughPolymer {
+    baseColor 1 1 0
+  }
+}
+Panel {
+  translation 2.425 -3.77 0.125
+  name "panel(8)"
+  size 0.02 0.327 0.26
+  appearance RoughPolymer {
+    baseColor 1 1 0
+  }
+  borderAppearance RoughPolymer {
+    baseColor 1 1 0
+  }
+}
+Panel {
+  translation 1.705 -3.77 0.125
+  name "panel(9)"
+  size 0.02 0.327 0.26
+  appearance RoughPolymer {
+    baseColor 1 1 0
+  }
+  borderAppearance RoughPolymer {
+    baseColor 1 1 0
+  }
+}
+Panel {
+  translation 0.975 -3.77 0.125
+  name "panel(10)"
+  size 0.02 0.327 0.26
+  appearance RoughPolymer {
+    baseColor 1 1 0
+  }
+  borderAppearance RoughPolymer {
+    baseColor 1 1 0
+  }
+}
+Panel {
+  translation 0.975 -2.77 0.125
+  name "panel(11)"
+  size 0.02 0.327 0.26
+  appearance RoughPolymer {
+    baseColor 1 1 0
+  }
+  borderAppearance RoughPolymer {
+    baseColor 1 1 0
+  }
+}
+Panel {
+  translation 0.975 -1.77 0.125
+  name "panel(12)"
+  size 0.02 0.327 0.26
+  appearance RoughPolymer {
+    baseColor 1 1 0
+  }
+  borderAppearance RoughPolymer {
+    baseColor 1 1 0
+  }
+}
+Panel {
+  translation 1.705 -1.77 0.125
+  name "panel(13)"
+  size 0.02 0.327 0.26
+  appearance RoughPolymer {
+    baseColor 1 1 0
+  }
+  borderAppearance RoughPolymer {
+    baseColor 1 1 0
+  }
+}
+Panel {
+  translation 1.705 -2.77 0.125
+  name "panel(14)"
+  size 0.02 0.327 0.26
+  appearance RoughPolymer {
+    baseColor 1 1 0
+  }
+  borderAppearance RoughPolymer {
+    baseColor 1 1 0
+  }
+}
+Panel {
+  translation 1.705 -0.77 0.125
+  name "panel(4)"
+  size 0.02 0.327 0.26
+  appearance RoughPolymer {
+    baseColor 1 1 0
+  }
+  borderAppearance RoughPolymer {
+    baseColor 1 1 0
+  }
+}
+Panel {
+  translation 0.975 -0.77 0.125
+  name "panel(5)"
+  size 0.02 0.327 0.26
+  appearance RoughPolymer {
+    baseColor 1 1 0
+  }
+  borderAppearance RoughPolymer {
+    baseColor 1 1 0
+  }
+}
+DEF Medium_Shelf2 Solid {
+  translation 1.7 -0.6 -0.71
+  children [
+    Transform {
+      translation 0 -0.005 0.819
+      scale 0.375 0.375 0.375
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_ShelfE_01/meshes/aws_robomaker_warehouse_ShelfE_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  name "solid(4)"
+  boundingObject Mesh {
+    url [
+      "../3d files/scaled/aws_robomaker_warehouse_ShelfE_01/meshes/aws_robomaker_warehouse_ShelfE_01_collision.dae"
+    ]
+  }
+}
+DEF Medium_Shelf3 Solid {
+  translation 1.7 -1.6 -0.71
+  children [
+    Transform {
+      translation 0 -0.005 0.819
+      scale 0.375 0.375 0.375
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_ShelfE_01/meshes/aws_robomaker_warehouse_ShelfE_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  name "solid(5)"
+  boundingObject Mesh {
+    url [
+      "../3d files/scaled/aws_robomaker_warehouse_ShelfE_01/meshes/aws_robomaker_warehouse_ShelfE_01_collision.dae"
+    ]
+  }
+}
+DEF Medium_Shelf4 Solid {
+  translation 1.7 -2.6 -0.71
+  children [
+    Transform {
+      translation 0 -0.005 0.819
+      scale 0.375 0.375 0.375
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_ShelfE_01/meshes/aws_robomaker_warehouse_ShelfE_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  name "solid(6)"
+  boundingObject Mesh {
+    url [
+      "../3d files/scaled/aws_robomaker_warehouse_ShelfE_01/meshes/aws_robomaker_warehouse_ShelfE_01_collision.dae"
+    ]
+  }
+}
+DEF Medium_Shelf5 Solid {
+  translation 1.7 -3.6 -0.71
+  children [
+    Transform {
+      translation 0 -0.005 0.819
+      scale 0.375 0.375 0.375
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_ShelfE_01/meshes/aws_robomaker_warehouse_ShelfE_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  name "solid(7)"
+  boundingObject Mesh {
+    url [
+      "../3d files/scaled/aws_robomaker_warehouse_ShelfE_01/meshes/aws_robomaker_warehouse_ShelfE_01_collision.dae"
+    ]
+  }
+}
+DEF Bucket1 Solid {
+  translation 0.02 3 0.15
+  children [
+    Transform {
+      scale 0.375 0.375 0.375
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_Bucket_01/meshes/aws_robomaker_warehouse_Bucket_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  name "solid(8)"
+  boundingObject Mesh {
+    url [
+      "../3d files/scaled/aws_robomaker_warehouse_Bucket_01/meshes/aws_robomaker_warehouse_Bucket_01_collision.dae"
+    ]
+  }
+}
+DEF Bucket2 Solid {
+  translation 0.02 3.525 0.15
+  children [
+    Transform {
+      scale 0.375 0.375 0.375
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_Bucket_01/meshes/aws_robomaker_warehouse_Bucket_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  name "solid(9)"
+  boundingObject Mesh {
+    url [
+      "../3d files/scaled/aws_robomaker_warehouse_Bucket_01/meshes/aws_robomaker_warehouse_Bucket_01_collision.dae"
+    ]
+  }
+}
+DEF Bucket3 Solid {
+  translation -0.67 -2.435 0.15
+  rotation 0 0 1 1.5708
+  children [
+    Transform {
+      scale 0.375 0.375 0.375
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_Bucket_01/meshes/aws_robomaker_warehouse_Bucket_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  name "solid(10)"
+  boundingObject Mesh {
+    url [
+      "../3d files/scaled/aws_robomaker_warehouse_Bucket_01/meshes/aws_robomaker_warehouse_Bucket_01_collision.dae"
+    ]
+  }
+}
+DEF Cluttering1 Solid {
+  translation -0.7 -2.955 -0.01
+  children [
+    Transform {
+      scale 0.375 0.375 0.375
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_ClutteringD_01/meshes/aws_robomaker_warehouse_ClutteringD_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  name "solid(11)"
+  boundingObject Mesh {
+    url [
+      "../3d files/scaled/aws_robomaker_warehouse_ClutteringD_01/meshes/aws_robomaker_warehouse_ClutteringD_01_collision.dae"
+    ]
+  }
+}
+DEF Cluttering3 Solid {
+  translation 1.28 1.405 0.111
+  rotation 0 0 1 1.5708
+  children [
+    Transform {
+      scale 0.375 0.375 0.375
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_ClutteringC_01/meshes/aws_robomaker_warehouse_ClutteringC_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  name "solid(14)"
+  boundingObject Mesh {
+    url [
+      "../3d files/scaled/aws_robomaker_warehouse_ClutteringC_01/meshes/aws_robomaker_warehouse_ClutteringC_01_collision.dae"
+    ]
+  }
+}
+DEF Cluttering4 Solid {
+  translation 2.11 1.405 0.111
+  rotation 0 0 1 -1.5707953071795862
+  children [
+    Transform {
+      scale 0.375 0.375 0.375
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_ClutteringC_01/meshes/aws_robomaker_warehouse_ClutteringC_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  name "solid(15)"
+  boundingObject Mesh {
+    url [
+      "../3d files/scaled/aws_robomaker_warehouse_ClutteringC_01/meshes/aws_robomaker_warehouse_ClutteringC_01_collision.dae"
+    ]
+  }
+}
+DEF Cluttering5 Solid {
+  translation 2.11 2.115 0
+  rotation 0 0 1 -1.5707953071795862
+  children [
+    Transform {
+      scale 0.375 0.375 0.375
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_ClutteringD_01/meshes/aws_robomaker_warehouse_ClutteringD_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  name "solid(16)"
+  boundingObject Mesh {
+    url [
+      "../3d files/scaled/aws_robomaker_warehouse_ClutteringD_01/meshes/aws_robomaker_warehouse_ClutteringD_01_collision.dae"
+    ]
+  }
+}
+DEF Cluttering6 Solid {
+  translation 1.28 2.115 0
+  rotation 0 0 1 -1.5707953071795862
+  children [
+    Transform {
+      scale 0.375 0.375 0.375
+      children [
+        CadShape {
+          url [
+            "../3d files/original/aws_robomaker_warehouse_ClutteringD_01/meshes/aws_robomaker_warehouse_ClutteringD_01_visual.DAE"
+          ]
+        }
+      ]
+    }
+  ]
+  name "solid(17)"
+  boundingObject Mesh {
+    url [
+      "../3d files/scaled/aws_robomaker_warehouse_ClutteringD_01/meshes/aws_robomaker_warehouse_ClutteringD_01_collision.dae"
+    ]
+  }
+}
+CardboardBox {
+  translation -0.55 1 0.3
+}
+CardboardBox {
+  translation -0.65 3.45 0.3
+  name "cardboard box(1)"
+}
+DEF TurtleBot3Burger TurtleBot3Burger {
+  translation -0.39 -0.3 0.124084
+  rotation 0 0 1 0
+  controller "<extern>"
+  supervisor TRUE
+  extensionSlot [
+    Pen {
+    }
+    RobotisLds01 {
+      noise 0.0013
+    }
+  ]
+}
+TexturedBackground {
+}
+TexturedBackgroundLight {
+  texture "mars"
+}
+DEF Agent Robot {
+  translation -1.94 -2.18 2.07
+  children [
+    WoodenBox {
+      translation 0 0 0
+      size 0.3 0.3 0.3
+      locked TRUE
+    }
+  ]
+  boundingObject Box {
+    size 0.3 0.3 0.3
+  }
+  controller "Agent"
+  supervisor TRUE
+  window "<none>"
+}
+DEF target_ball Pose {
+  translation 1.75 3.23 0.15
+  children [
+    CadShape {
+      url [
+        "../3d files/target_ball.dae"
+      ]
+    }
+  ]
+}

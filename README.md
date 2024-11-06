@@ -58,4 +58,24 @@ Project Progress :
   export ROS_DISTRO={your_ros2_distro_name}
   export ROS_PYTHON_VERSION={you_ros2_python_version}
   ```
+
+###3. <Strong>Colcon build on ros2_irl_ws folder </strong>
+   Build with "Colcon build" command on ros2_irl_ws folder and then source the local_setup.sh/.zsh from install folder.
+   ```bash
+   # enter the folder 
+   cd ros2_irl_ws
+   
+   # build the package
+   colcon build
+
+   # you can adding on ~/.bashrc if you use bash, if you use zsh adding on ~/.zshrc
+   # if you use bash
+   source ~/turtlebot3_irl_project/ros2_irl_ws/install/local_setup.sh
+
+   # if you use zsh
+   source ~/turtlebot3_irl_project/ros2_irl_ws/install/local_setup.zsh
+   ```
+
+###4. <Strong>Run Program</strong>
+  - You can run simulation on Webots with world file 
   
