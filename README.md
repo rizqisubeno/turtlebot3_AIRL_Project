@@ -20,7 +20,7 @@ Project Progress :
 
 - First, Installing ROS2 Package. Actually, ROS2 package is optional (because the ros2 package is only used for visualization of robot movement to rviz). The code works in ROS2 Humble and Jazzy. To install ROS2 Humble, see https://docs.ros.org/en/humble/Installation.html. Otherwise, to install ROS2 Jazzy, see https://docs.ros.org/en/jazzy/Installation.html.
   
-- Second, Installing Protobuf to communicate RL Agent (Python) to Turtlebot3 Robot(C++)
+- Second, Installing Protobuf the base message communication between RL Agent and Turtlebot3 Robot.
 
   ```bash
   # Protobuf version 3.21.12
@@ -40,7 +40,7 @@ Project Progress :
   sudo make install
   ```
 
-- Third, Installing ZMQ library for c++
+- Third, Installing ZMQ library for c++. The communication protocol to communicate RL Agent (Python) to Turtlebot3 Robot (C++).
   ```bash
   #(for Ubuntu)
   sudo apt install libzmq3-dev
