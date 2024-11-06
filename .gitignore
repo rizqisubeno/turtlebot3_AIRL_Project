@@ -4,3 +4,6 @@
 /turtlebot3_webots_project/controllers/Agent/RL_Model
 /turtlebot3_webots_project/controllers/Agent/runs
 /turtlebot3_webots_project/controllers/Agent/__pycache__
+/ros2_irl_ws/log
+/ros2_irl_ws/install
+/ros2_irl_ws/build
