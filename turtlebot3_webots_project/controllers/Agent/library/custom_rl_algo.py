@@ -13,6 +13,9 @@ from torch.optim.adam import Adam
 # import tyro
 from torch import distributions as td
 from torch.distributions.normal import Normal
+from torch.functional import F
+
+from stable_baselines3.common.buffers import ReplayBuffer
 from library.clipped_gaussian import ClippedGaussian
 
 from torch.utils.tensorboard.writer import SummaryWriter
@@ -214,6 +217,15 @@ class PPO():
                                   activation=self.params.activation_fn,
                                   use_tanh_output=self.params.use_tanh_output,
                                   device=self.device).to(self.device)
+        # needed for kl_rollback
+        self.target_agent = PPO_Agent_NN(env, 
+                                  logger=self.logger,
+                                  distribution=self.params.distributions,
+                                  rpo_alpha=self.params.rpo_alpha, 
+                                  activation=self.params.activation_fn,
+                                  use_tanh_output=self.params.use_tanh_output,
+                                  device=self.device).to(self.device)
+        
         self.optimizer = Adam(self.agent.parameters(), lr=self.params.learning_rate, eps=1e-8)
         if (self.params.use_icm):
             self.ICM = ICM(observation_shape=self.env.single_observation_space.shape[0],
@@ -393,6 +405,7 @@ class PPO():
             clipfracs = []
             for _ in range(self.params.num_epoch):
                 np.random.shuffle(b_inds)
+                self.target_agent.load_state_dict(self.agent.state_dict())
                 approx_kl_list = []
                 for start in range(0, self.batch_size, self.minibatch_size):
                     end = start + self.minibatch_size
@@ -444,9 +457,16 @@ class PPO():
 
                 # self.logger.print("hidden", "RPO", f"approx kl max:{np.max(approx_kl_list):.3f}, min:{np.min(approx_kl_list):.7f}")
                 if self.params.target_kl is not None:
-                    if approx_kl > self.params.target_kl:
-                        self.logger.print("err", f"approx kl reach target")
+                    if approx_kl > self.params.target_kl and self.params.kle_stop:
+                        self.logger.print("err", f"approx kl reach target, stopping update")
                         break
+
+                    # adding kle_rollback if needed
+                    if self.params.kle_rollback:
+                        if (b_logprobs[mb_inds] - self.agent.get_action_and_value(b_obs[mb_inds], b_actions[mb_inds])[1]).mean() > self.params.target_kl:
+                            self.agent.load_state_dict(self.target_agent.state_dict())
+                            self.logger.print("err", f"approx kl reach target, rollback the model")
+                            break
 
             y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
             var_y = np.var(y_true)
@@ -463,6 +483,8 @@ class PPO():
             self.env.envs[0].writer.add_scalar("losses/explained_variance", explained_var, global_step)
             #print("SPS:", int(global_step / (time.time() - start_time)))
             self.env.envs[0].writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+            #adding logging for log std
+            self.env.envs[0].writer.add_scalar("charts/log_std", self.agent.actor_logstd, global_step)
 
         self.env.envs[0].writer.close()
         self.env.close()
@@ -493,10 +515,201 @@ class PPO():
 
         self.env.close()
 
-class PPG():
+#get from https://github.com/DLR-RM/stable-baselines3/blob/master/stable_baselines3/common/distributions.py
+def sum_independent_dims(tensor: torch.Tensor) -> torch.Tensor:
     """
-    Phasic Policy Gradients Algorithm
+    Continuous actions are usually considered to be independent,
+    so we can sum components of the ``log_prob`` or the entropy.
+
+    :param tensor: shape: (n_batch, n_actions) or (n_batch,)
+    :return: shape: (n_batch,) for (n_batch, n_actions) input, scalar for (n_batch,) input
     """
+    if len(tensor.shape) > 1:
+        tensor = tensor.sum(dim=1)
+    else:
+        tensor = tensor.sum()
+    return tensor
+
+#get from https://github.com/DLR-RM/stable-baselines3/blob/master/stable_baselines3/common/distributions.py
+class TanhBijector:
+    """
+    Bijective transformation of a probability distribution
+    using a squash function (tanh).
+    
+    :param epsilon: small value to avoid NaN due to numerical imprecision
+    """
+    def __init__(self,
+                 epsilon: float = 1e-6):
+        super().__init__()
+        self.epsilon = epsilon
+
+    @staticmethod
+    def forward(x: torch.Tensor) -> torch.Tensor:
+        return torch.tanh(x)
+    
+    @staticmethod
+    def atanh(x: torch.Tensor) -> torch.Tensor:
+        """
+        Inverse of Tanh
+
+        Taken from Pyro: https://github.com/pyro-ppl/pyro
+        0.5 * torch.log((1 + x ) / (1 - x))
+        """
+        return 0.5 * (x.log1p() - (-x).log1p())
+
+    @staticmethod
+    def inverse(y: torch.Tensor) -> torch.Tensor:
+        """
+        Inverse tanh.
+
+        :param y:
+        :return:
+        """
+        eps = torch.finfo(y.dtype).eps
+        # Clip the action to avoid NaN
+        return TanhBijector.atanh(y.clamp(min=-1.0 + eps, max=1.0 - eps))
+
+    def log_prob_correction(self, x: torch.Tensor) -> torch.Tensor:
+        # Squash correction (from original SAC implementation)
+        return torch.log(1.0 - torch.tanh(x) ** 2 + self.epsilon)
+
+# Using Q(s,a) Predict Network for SAC
+class SoftQNetwork(nn.Module):
+    def __init__(self,
+                 env: gym.Env,
+                 logger: Logger,
+                 device: Type[torch.device]=None,
+                 activation: Type[nn.Module]=nn.ReLU):
+        super().__init__()
+        self.logger = logger
+        self.device = device
+        layer_list = nn.ModuleList()
+        layer_list.append(nn.Linear(np.array(env.single_observation_space.shape).prod() + 
+                                    np.prod(env.single_action_space.shape), 256))
+        layer_list.append(activation())
+        layer_list.append(nn.Linear(256, 256))
+        layer_list.append(activation())
+        layer_list.append(nn.Linear(256, 1))
+
+        self.q_network = nn.Sequential(*layer_list)
+
+    def forward(self, state, action):
+        input = torch.cat([state, action], 1)
+        return self.q_network(input)
+    
+    def save_model(self, path: str, exp_name: str, iter: int):
+        """Save model to a specified path."""
+        path = path+"/" if path[-1]!="/" else path
+        last_path = str(os.path.join(path, exp_name))+f"_{iter}.pth"
+        if os.path.exists(path):
+            pass
+        else:
+            os.makedirs(path, exist_ok=True)
+        torch.save(self.state_dict(), last_path)
+        self.logger.print("info", f"Q-Net Model saved to {path}")
+
+    def load_model(self, path: str, exp_name: str, iter: int):
+        """Load model from a specified path."""
+        path = str(os.path.join(path, exp_name))+f"_{iter}.pth"
+        self.load_state_dict(torch.load(path, 
+                                        map_location=self.device,
+                                        weights_only=True))
+        self.logger.print("info", f"Q-Net Model loaded from {path}")
+
+LOG_STD_MAX = 2
+
+#default from cleanrl
+#LOG_STD_MIN = -5
+
+#default from stable-baselines3
+LOG_STD_MIN = -20
+
+
+class SAC_Actor(nn.Module):
+    def __init__(self,
+                 env: gym.Env,
+                 logger: Logger,
+                 device: Type[torch.device]=None,
+                 activation: Type[nn.Module]=nn.ReLU):
+        super().__init__()
+        self.logger = logger
+        self.device = device
+        layer_list = nn.ModuleList()
+        layer_list.append(nn.Linear(np.array(env.single_observation_space.shape).prod(), 256))
+        layer_list.append(activation())
+        layer_list.append(nn.Linear(256, 256))
+        layer_list.append(activation())
+
+        self.base_nn = nn.Sequential(*layer_list)
+        self.actor_mean = nn.Linear(256, np.prod(env.single_action_space.shape))
+        self.actor_logstd = nn.Linear(256, np.prod(env.single_action_space.shape))
+        self.gaussian_actions: Optional[torch.Tensor] = None
+
+    def forward(self, state):
+        input = self.base_nn(state)
+        action_mean = self.actor_mean(input)
+        action_logstd = self.actor_logstd(input)
+        #Original Implementation to cap the standard deviation
+        action_logstd = torch.clamp(action_logstd, LOG_STD_MIN, LOG_STD_MAX)
+
+        return action_mean, action_logstd
+    
+    def log_prob(self, 
+                 actions: torch.Tensor, 
+                 gaussian_actions: Optional[torch.Tensor] = None,
+                 epsilon: float = 1e-6) -> torch.Tensor:
+        # Inverse tanh
+        # Naive implementation (not stable): 0.5 * torch.log((1 + x) / (1 - x))
+        # We use numpy to avoid numerical instability
+        if gaussian_actions is None:
+            # It will be clipped to avoid NaN when inversing tanh
+            gaussian_actions = TanhBijector.inverse(actions)
+
+        # Log likelihood for a Gaussian distribution
+        log_prob = sum_independent_dims(self.distributions.log_prob(gaussian_actions))
+        # Squash correction (from original SAC implementation)
+        # this comes from the fact that tanh is bijective and differentiable
+        log_prob -= torch.sum(torch.log(1 - actions**2 + epsilon), dim=1)
+        return log_prob
+
+    def get_action(self, 
+                   x, 
+                   deterministic: bool = False):
+        mean, log_std = self(x)
+        std = log_std.exp()
+        self.distributions = torch.distributions.Normal(mean, std)
+        if deterministic:
+            self.gaussian_actions = self.distributions.mean
+            actions = torch.tanh(self.gaussian_actions)
+        else:
+            self.gaussian_actions = self.distributions.rsample()
+            actions = torch.tanh(self.gaussian_actions)
+        log_prob = self.log_prob(actions, self.gaussian_actions).reshape(-1, 1)
+        # print(f"{log_prob.shape=}")
+        return actions, log_prob
+    
+    def save_model(self, path: str, exp_name: str, iter: int):
+        """Save model to a specified path."""
+        path = path+"/" if path[-1]!="/" else path
+        last_path = str(os.path.join(path, exp_name))+f"_{iter}.pth"
+        if os.path.exists(path):
+            pass
+        else:
+            os.makedirs(path, exist_ok=True)
+        torch.save(self.state_dict(), last_path)
+        self.logger.print("info", f"Actor Model saved to {path}")
+
+    def load_model(self, path: str, exp_name: str, iter: int):
+        """Load model from a specified path."""
+        path = str(os.path.join(path, exp_name))+f"_{iter}.pth"
+        self.load_state_dict(torch.load(path, 
+                                        map_location=self.device,
+                                        weights_only=True))
+        self.logger.print("info", f"Actor Model loaded from {path}")
+
+
+# specific for single environment only    
+class SAC():
     def __init__(self,
                  env,
                  params_cfg):
@@ -506,31 +719,46 @@ class PPG():
 
         self.params = self.read_param_cfg(params_cfg=params_cfg)
 
-        self.batch_size = self.num_envs * self.params.num_steps 
-        self.minibatch_size = self.batch_size // self.params.num_minibatches
-        
         # TRY NOT TO MODIFY: seeding
         random.seed(self.params.seed)
         np.random.seed(self.params.seed)
         torch.manual_seed(self.params.seed)
         torch.backends.cudnn.deterministic = self.params.torch_deterministic
-        # passing to env
-        self.env.seed = self.params.seed
         
         self.device = torch.device("cuda" if torch.cuda.is_available() and self.params.cuda_en else "cpu")
         
         assert isinstance(env.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
-        # Initialize PPO_Agent_NN Function
-        self.agent = PPG_Agent_NN(env,  
-                        activation=self.params.activation_fn,
-                        device=self.device).to(self.device)
-        self.optimizer = Adam(self.agent.parameters(), lr=self.params.learning_rate, eps=1e-8)
-        
         self.logger = Logger()
 
-        # if hasattr(self.env.envs[0], 'writer'):
-        # if self.env.get_wrapper_attr('writer'):
+        self.actor = SAC_Actor(env, self.logger).to(self.device)
+        self.qf1 = SoftQNetwork(env, self.logger).to(self.device)
+        self.qf2 = SoftQNetwork(env, self.logger).to(self.device)
+        self.qf1_target = SoftQNetwork(env, self.logger).to(self.device)
+        self.qf2_target = SoftQNetwork(env, self.logger).to(self.device)
+        self.qf1_target.load_state_dict(self.qf1.state_dict())
+        self.qf2_target.load_state_dict(self.qf2.state_dict())
+        self.q_optimizer = torch.optim.Adam(list(self.qf1.parameters()) + list(self.qf2.parameters()), lr=self.params.q_lr)
+        self.actor_optimizer = torch.optim.Adam(list(self.actor.parameters()), lr=self.params.policy_lr)
+
+        # Automatic entropy tuning
+        if self.params.autotune:
+            self.target_entropy = -torch.prod(torch.Tensor(env.single_action_space.shape).to(self.device)).item()
+            self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
+            self.alpha = self.log_alpha.exp().item()
+            self.a_optimizer = torch.optim.Adam([self.log_alpha], lr=self.params.q_lr)
+        else:
+            self.alpha = self.params.alpha
+
+        env.single_observation_space.dtype = np.float32
+        self.buffer = ReplayBuffer(
+                                   buffer_size=self.params.buffer_size,
+                                   observation_space=self.env.single_observation_space,
+                                   action_space=self.env.single_action_space,
+                                   device=self.device,
+                                   handle_timeout_termination=False,
+        )
+
         try:
             _ = self.env.unwrapped.writer
             self.logger.print("info", "SummaryWriter Found on Env")
@@ -542,272 +770,164 @@ class PPG():
             self.logger.print("info", "Create SummaryWriter inside Env")
             self.env.envs[0].writer = SummaryWriter(f"runs/{self.params.exp_name}")
 
+        self.save_config = "reset" if self.params.save_every_reset else "step"
+
+        if("reset" in self.save_config):
+            self.reset_counter = 0
+            self.save_iter = 0
+        elif("step" in self.save_config):
+            self.num_timestep = 0
+            self.save_iter = 0
+    
     def read_param_cfg(self, params_cfg, verbose:Optional[bool]=False):
-        head_name = "PPG_read_param"
         cfg_namespace = SimpleNamespace(**params_cfg)
         if(verbose):
             for key, val in cfg_namespace.items():
                 self.logger.print("info", f"{key} :\t{val}")
-        return cfg_namespace 
-    
+        return cfg_namespace  
+
     def train(self, total_timesteps:Optional[int]=int(1e6)):
-        self.num_iterations = int(total_timesteps // self.batch_size)
-        self.num_phases = int(self.num_iterations // self.params.n_iteration)
-        self.aux_batch_rollouts = int(self.num_envs * self.params.n_iteration)
-        # ALGO Logic: Storage setup
-        obs = torch.zeros((self.params.num_steps, self.num_envs) + self.env.single_observation_space.shape).to(self.device)
-        next_obs = torch.zeros((self.params.num_steps, self.num_envs) + self.env.single_observation_space.shape).to(self.device)
-        actions = torch.zeros((self.params.num_steps, self.num_envs) + self.env.single_action_space.shape).to(self.device)
-        logprobs = torch.zeros((self.params.num_steps, self.num_envs)).to(self.device)
-        rewards = torch.zeros((self.params.num_steps, self.num_envs)).to(self.device)
-        next_dones = torch.zeros((self.params.num_steps, self.num_envs)).to(self.device)
-        next_terminations = torch.zeros((self.params.num_steps, self.num_envs)).to(self.device)
-        values = torch.zeros((self.params.num_steps, self.num_envs)).to(self.device)
-        aux_obs = torch.zeros((self.params.num_steps, 
-                               self.aux_batch_rollouts) + self.env.single_observation_space.shape)  # Saves lot system RAM
-        aux_returns = torch.zeros((self.params.num_steps, self.aux_batch_rollouts))
+        start_time = time.time()
 
         # TRY NOT TO MODIFY: start the game
-        global_step = 0
-        start_time = time.time()
-        next_ob, _ = self.env.reset(seed=self.params.seed)
-        next_ob = torch.Tensor(next_ob).to(self.device)
-        next_termination = torch.zeros(self.num_envs).to(self.device)
+        obs, _ = self.env.reset(seed=self.params.seed)
+        for global_step in range(total_timesteps):
+            # ALGO LOGIC: put action logic here
+            if global_step < self.params.learning_starts:
+                actions = np.array([self.env.single_action_space.sample() for _ in range(self.env.num_envs)])
+            else:
+                actions, _ = self.actor.get_action(torch.Tensor(obs).to(self.device))
+                actions = actions.detach().cpu().numpy()
 
-        for phase in range(1, self.num_phases + 1):
-
-            #Policy Phase
-            self.logger.print("hidden", "Policy Phase Training...")
-            for iteration in range(1, self.params.n_iteration + 1):
-                # Annealing the rate if instructed to do so.
-                if self.params.anneal_lr:
-                    frac = 1.0 - (iteration - 1.0) / self.num_iterations
-                    lrnow = frac * self.params.learning_rate
-                    self.optimizer.param_groups[0]["lr"] = lrnow
-
-                for step in range(0, self.params.num_steps):
-                    global_step += self.num_envs
-                    
-                    ob = next_ob
-                    # ALGO LOGIC: action logic
-                    with torch.no_grad():
-                        action, logprob, _, value = self.agent.get_action_and_value(ob)
-
-                    # TRY NOT TO MODIFY: execute the game and log data.
-                    next_ob, reward, next_termination, next_truncation, info = self.env.step(action.cpu().numpy())
-                    
-                    # Correct next observation (for vec gym)
-                    real_next_ob = next_ob.copy()
-                    for idx, trunc in enumerate(next_truncation):
-                        if trunc:
-                            real_next_ob[idx] = info["final_observation"][idx]
-                    next_ob = torch.Tensor(next_ob).to(self.device)
-                    
-                    # Collect trajectory
-                    obs[step] = torch.Tensor(ob).to(self.device)
-                    next_obs[step] = torch.Tensor(real_next_ob).to(self.device)
-                    actions[step] = torch.Tensor(action).to(self.device)
-                    logprobs[step] = torch.Tensor(logprob).to(self.device)
-                    values[step] = torch.Tensor(value.flatten()).to(self.device)
-                    next_terminations[step] = torch.Tensor(next_termination).to(self.device)
-                    next_dones[step] = torch.Tensor(np.logical_or(next_termination, next_truncation)).to(self.device)
-                    rewards[step] = torch.tensor(reward).to(self.device).view(-1)
-
-                    # print(f"{info=}")
-                    if "final_info" in info:
-                        for info in info["final_info"]:
-                            if info and "episode" in info:
-                                self.logger.print("info",f"global_step={global_step}, episodic_return={info['episode']['r']}")
-                                self.env.envs[0].writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
-                                self.env.envs[0].writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
-
-                # bootstrap value if not done
-                with torch.no_grad():
-                    next_values = torch.zeros_like(values[0]).to(self.device)
-                    advantages = torch.zeros_like(rewards).to(self.device)
-                    lastgaelam = 0
-                    for t in reversed(range(self.params.num_steps)):
-                        if t == self.params.num_steps - 1:
-                            next_values = self.agent.get_value(next_obs[t]).flatten()
-                        else:
-                            value_mask = next_dones[t].bool()
-                            next_values[value_mask] = self.agent.get_value(next_obs[t][value_mask]).flatten()
-                            next_values[~value_mask] = values[t + 1][~value_mask]
-                        delta = rewards[t] + self.params.gamma * next_values * (1 - next_terminations[t]) - values[t]
-                        advantages[t] = lastgaelam = delta + self.params.gamma * self.params.gae_lambda * (1 - next_dones[t]) * lastgaelam
-                    returns = advantages + values
-
-                # flatten the batch
-                b_obs = obs.reshape((-1,) + self.env.single_observation_space.shape)
-                b_logprobs = logprobs.reshape(-1)
-                b_actions = actions.reshape((-1,) + self.env.single_action_space.shape)
-                b_advantages = advantages.reshape(-1)
-                b_returns = returns.reshape(-1)
-                b_values = values.reshape(-1)
-
-                # PPG code does full batch advantage normalization
-                if self.params.norm_adv_fullbatch:
-                    b_advantages = (b_advantages - b_advantages.mean()) / (b_advantages.std() + 1e-8)
-
-                # Optimizing the policy and value network
-                b_inds = np.arange(self.batch_size)
-                clipfracs = []
-                for _ in range(self.params.e_policy):
-                    np.random.shuffle(b_inds)
-                    approx_kl_list = []
-                    for start in range(0, self.batch_size, self.minibatch_size):
-                        end = start + self.minibatch_size
-                        mb_inds = b_inds[start:end]
-
-                        _, newlogprob, entropy, newvalue = self.agent.get_action_and_value(b_obs[mb_inds], b_actions[mb_inds])
-                        logratio = newlogprob - b_logprobs[mb_inds]
-                        ratio = logratio.exp()
-
-                        with torch.no_grad():
-                            # calculate approx_kl http://joschu.net/blog/kl-approx.html
-                            old_approx_kl = (-logratio).mean()
-                            approx_kl = ((ratio - 1) - logratio).mean()
-                            clipfracs += [((ratio - 1.0).abs() > self.params.clip_coef).float().mean().item()]
+            # TRY NOT TO MODIFY: execute the game and log data.
+            next_obs, rewards, terminations, truncations, infos = self.env.step(actions)
                         
-                        approx_kl_list.append(approx_kl.item())
+            # TRY NOT TO MODIFY: record rewards for plotting purposes
+            if "final_info" in infos:
+                for info in infos["final_info"]:
+                    print(f"global_step={global_step}, episodic_return={info['episode']['r']}")
+                    self.env.envs[0].writer.add_scalar("charts/episodic_return", info["episode"]["r"], global_step)
+                    self.env.envs[0].writer.add_scalar("charts/episodic_length", info["episode"]["l"], global_step)
+                    if("reset" in self.save_config):
+                        self.reset_counter += 1
+                    break
 
-                        mb_advantages = b_advantages[mb_inds]
-                        if self.params.norm_adv:
-                            mb_advantages = (mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+            # saving model every step
+            if("reset" in self.save_config):
+                if (self.reset_counter % self.params.save_step == 0 and self.reset_counter>0):
+                    self.reset_counter = 0
+                    self.save_iter += 1
+                    self.actor.save_model(self.params.save_path,
+                                          self.params.exp_name,
+                                          int(self.save_iter))
+                    
+            elif("step" in self.save_config):
+                self.num_timestep += 1
+                if (self.num_timestep % self.params.save_step == 0 and self.num_timestep>=0):
+                    self.num_timestep = 0
+                    self.save_iter += 1
+                    self.actor.save_model(self.params.save_path,
+                                          self.params.exp_name,
+                                          int(self.save_iter))
 
-                        # Policy loss
-                        pg_loss1 = -mb_advantages * ratio
-                        pg_loss2 = -mb_advantages * torch.clamp(ratio, 1 - self.params.clip_coef, 1 + self.params.clip_coef)
-                        pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+            # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
+            real_next_obs = next_obs.copy()
+            for idx, trunc in enumerate(truncations):
+                if trunc:
+                    real_next_obs[idx] = infos["final_observation"][idx]
+            self.buffer.add(obs, real_next_obs, actions, rewards, terminations, infos)
 
-                        # Value loss
-                        newvalue = newvalue.view(-1)
-                        if self.params.clip_vloss:
-                            v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
-                            v_clipped = b_values[mb_inds] + torch.clamp(
-                                newvalue - b_values[mb_inds],
-                                -self.params.clip_coef,
-                                self.params.clip_coef,
-                            )
-                            v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
-                            v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
-                            v_loss = 0.5 * v_loss_max.mean()
-                        else:
-                            v_loss = 0.5 * ((newvalue - b_returns[mb_inds]) ** 2).mean()
+            # TRY NOT TO MODIFY: CRUCIAL step easy to overlook
+            obs = next_obs
 
-                        entropy_loss = entropy.mean()
-                        loss = pg_loss - self.params.ent_coef * entropy_loss + v_loss * self.params.vf_coef
-
-                        self.optimizer.zero_grad()
-                        loss.backward()
-                        nn.utils.clip_grad_norm_(self.agent.parameters(), self.params.max_grad_norm)
-                        self.optimizer.step()
-
-                    # self.logger.print("hidden", "RPO", f"approx kl max:{np.max(approx_kl_list):.3f}, min:{np.min(approx_kl_list):.7f}")
-                    if self.params.target_kl is not None:
-                        if approx_kl > self.params.target_kl:
-                            self.logger.print("err", f"approx kl reach target")
-                            break
-
-                y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
-                var_y = np.var(y_true)
-                explained_var = np.nan if var_y == 0 else 1 - np.var(y_true - y_pred) / var_y
-
-                # TRY NOT TO MODIFY: record rewards for plotting purposes
-                self.env.envs[0].writer.add_scalar("charts/learning_rate", self.optimizer.param_groups[0]["lr"], global_step)
-                self.env.envs[0].writer.add_scalar("losses/value_loss", v_loss.item(), global_step)
-                self.env.envs[0].writer.add_scalar("losses/policy_loss", pg_loss.item(), global_step)
-                self.env.envs[0].writer.add_scalar("losses/entropy", entropy_loss.item(), global_step)
-                self.env.envs[0].writer.add_scalar("losses/old_approx_kl", old_approx_kl.item(), global_step)
-                self.env.envs[0].writer.add_scalar("losses/approx_kl", approx_kl.item(), global_step)
-                self.env.envs[0].writer.add_scalar("losses/clipfrac", np.mean(clipfracs), global_step)
-                self.env.envs[0].writer.add_scalar("losses/explained_variance", explained_var, global_step)
-                #print("SPS:", int(global_step / (time.time() - start_time)))
-                self.env.envs[0].writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
-
-                # PPG Storage - Rollouts are saved without flattening for sampling full rollouts later:
-                storage_slice = slice(self.num_envs * (iteration - 1), self.num_envs * iteration)
-                aux_obs[:, storage_slice] = obs.cpu().clone()
-                aux_returns[:, storage_slice] = returns.cpu().clone()
-
-            # Auxiliary Phase
-            self.logger.print("hidden", "Auxiliary Phase Training...")
-            aux_inds = np.arange(self.aux_batch_rollouts)
-
-                # Build the old policy on the aux buffer before distilling to the network
-            aux_pi_mean = torch.zeros((self.params.num_steps, 
-                                self.aux_batch_rollouts, 
-                                np.prod(self.env.single_action_space.shape)
-                                ))
-            aux_pi_std = torch.zeros((self.params.num_steps, 
-                                self.aux_batch_rollouts, 
-                                np.prod(self.env.single_action_space.shape)
-                                ))
-            for i, start in enumerate(range(0, self.aux_batch_rollouts, self.params.num_aux_rollouts)):
-                end = start + self.params.num_aux_rollouts
-                aux_minibatch_ind = aux_inds[start:end]
-                m_aux_obs = aux_obs[:, aux_minibatch_ind].to(torch.float32).to(self.device)
-                m_obs_shape = m_aux_obs.shape
-                # m_aux_obs = flatten01(m_aux_obs)      # uncomment this because obs is 1-d not 2-d
-                # print(f"{m_aux_obs=}")
+            # ALGO LOGIC: training.
+            if global_step > self.params.learning_starts:
+                data = self.buffer.sample(self.params.batch_size)
                 with torch.no_grad():
-                    pi_mean, pi_std = self.agent.get_pi(m_aux_obs)
-                # aux_pi[:, aux_minibatch_ind] = unflatten01(pi_logits, m_obs_shape[:2]) # we don't use unflatten because obs is already 1-d
-                aux_pi_mean[:, aux_minibatch_ind] = pi_mean.cpu().clone()
-                aux_pi_std[:, aux_minibatch_ind] = pi_std.cpu().clone()
-                del m_aux_obs
+                    next_state_actions, next_state_log_pi = self.actor.get_action(data.next_observations)
+                    qf1_next_target = self.qf1_target(data.next_observations, next_state_actions)
+                    qf2_next_target = self.qf2_target(data.next_observations, next_state_actions)
+                    min_qf_next_target = torch.min(qf1_next_target, qf2_next_target) - self.alpha * next_state_log_pi
+                    next_q_value = data.rewards.flatten() + (1 - data.dones.flatten()) * self.params.gamma * (min_qf_next_target).view(-1)
 
-            for auxiliary_update in range(1, self.params.e_auxiliary + 1):
-                # print(f"aux epoch {auxiliary_update}")
-                np.random.shuffle(aux_inds)
-                for i, start in enumerate(range(0, self.aux_batch_rollouts, self.params.num_aux_rollouts)):
-                    end = start + self.params.num_aux_rollouts
-                    aux_minibatch_ind = aux_inds[start:end]
-                    try:
-                        m_aux_obs = aux_obs[:, aux_minibatch_ind].to(self.device)
-                        m_obs_shape = m_aux_obs.shape
-                        # m_aux_obs = flatten01(m_aux_obs)  # Sample full rollouts for PPG instead of random indexes (already 1-d data)
-                        m_aux_returns = aux_returns[:, aux_minibatch_ind].to(torch.float32).to(self.device)
-                        #m_aux_returns = flatten01(m_aux_returns) already 1-d data not to be flattening
-                        # print(f"{aux_returns.shape=}")
-                        new_pi_mean, new_pi_std, new_values, new_aux_values = self.agent.get_pi_value_and_aux_value(m_aux_obs)
+                qf1_a_values = self.qf1(data.observations, data.actions).view(-1)
+                qf2_a_values = self.qf2(data.observations, data.actions).view(-1)
+                qf1_loss = F.mse_loss(qf1_a_values, next_q_value)
+                qf2_loss = F.mse_loss(qf2_a_values, next_q_value)
+                qf_loss = qf1_loss + qf2_loss
 
-                        # print(f"{new_values.shape=}")
-                        # new_values = new_values.view(-1)
-                        # new_aux_values = new_aux_values.view(-1)
-                        new_values = new_values.squeeze(-1)
-                        new_aux_values = new_aux_values.squeeze(-1)
-                        # print(f"{new_values.shape=}")
-                        # old_pi_logits = flatten01(aux_pi[:, aux_minibatch_ind]).to(device)
-                        old_pi_mean = aux_pi_mean[:, aux_minibatch_ind].to(self.device)
-                        old_pi_std = aux_pi_std[:, aux_minibatch_ind].to(self.device)
+                # optimize the model
+                self.q_optimizer.zero_grad()
+                qf_loss.backward()
+                self.q_optimizer.step()
 
-                        old_pi = Normal(loc=old_pi_mean, scale=old_pi_std)
-                        new_pi = Normal(loc=new_pi_mean, scale=new_pi_std)
+                if global_step % self.params.policy_frequency == 0:  # TD 3 Delayed update support
+                    for _ in range(
+                        self.params.policy_frequency
+                    ):  # compensate for the delay by doing 'actor_update_interval' instead of 1
+                        pi, log_pi = self.actor.get_action(data.observations)
+                        qf1_pi = self.qf1(data.observations, pi)
+                        qf2_pi = self.qf2(data.observations, pi)
+                        min_qf_pi = torch.min(qf1_pi, qf2_pi)
+                        actor_loss = ((self.alpha * log_pi) - min_qf_pi).mean()
 
-                        kl_loss = td.kl_divergence(old_pi, new_pi).mean()
+                        self.actor_optimizer.zero_grad()
+                        actor_loss.backward()
+                        self.actor_optimizer.step()
 
-                        # print(f"{m_aux_returns.shape=}")
-                        real_value_loss = 0.5 * ((new_values - m_aux_returns) ** 2).mean()
-                        aux_value_loss = 0.5 * ((new_aux_values - m_aux_returns) ** 2).mean()
-                        joint_loss = aux_value_loss + self.params.beta_clone * kl_loss
+                        if self.params.autotune:
+                            with torch.no_grad():
+                                _, log_pi = self.actor.get_action(data.observations)
+                            alpha_loss = (-self.log_alpha.exp() * (log_pi + self.target_entropy)).mean()
 
-                        loss = (joint_loss + real_value_loss) / self.params.n_aux_grad_accum
-                        loss.backward()
+                            self.a_optimizer.zero_grad()
+                            alpha_loss.backward()
+                            self.a_optimizer.step()
+                            self.alpha = self.log_alpha.exp().item()
 
-                        if (i + 1) % self.params.n_aux_grad_accum == 0:
-                            nn.utils.clip_grad_norm_(self.agent.parameters(), self.params.max_grad_norm)
-                            self.optimizer.step()
-                            self.optimizer.zero_grad()  # This cannot be outside, else gradients won't accumulate
+                # update the target networks
+                if global_step % self.params.target_network_frequency == 0:
+                    for param, target_param in zip(self.qf1.parameters(), self.qf1_target.parameters()):
+                        target_param.data.copy_(self.params.tau * param.data + (1 - self.params.tau) * target_param.data)
+                    for param, target_param in zip(self.qf2.parameters(), self.qf2_target.parameters()):
+                        target_param.data.copy_(self.params.tau * param.data + (1 - self.params.tau) * target_param.data)
 
-                    except RuntimeError as e:
-                        raise Exception(
-                            "if running out of CUDA memory, try a higher --n-aux-grad-accum, which trades more time for less gpu memory"
-                        ) from e
+                if global_step % 100 == 0:
+                    self.env.envs[0].writer.add_scalar("losses/qf1_values", qf1_a_values.mean().item(), global_step)
+                    self.env.envs[0].writer.add_scalar("losses/qf2_values", qf2_a_values.mean().item(), global_step)
+                    self.env.envs[0].writer.add_scalar("losses/qf1_loss", qf1_loss.item(), global_step)
+                    self.env.envs[0].writer.add_scalar("losses/qf2_loss", qf2_loss.item(), global_step)
+                    self.env.envs[0].writer.add_scalar("losses/qf_loss", qf_loss.item() / 2.0, global_step)
+                    self.env.envs[0].writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
+                    self.env.envs[0].writer.add_scalar("losses/alpha", self.alpha, global_step)
+                    print("SPS:", int(global_step / (time.time() - start_time)))
+                    self.env.envs[0].writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
+                    if self.params.autotune:
+                        self.env.envs[0].writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
 
-                    del m_aux_obs, m_aux_returns
-            self.env.envs[0].writer.add_scalar("losses/aux/kl_loss", kl_loss.mean().item(), global_step)
-            self.env.envs[0].writer.add_scalar("losses/aux/aux_value_loss", aux_value_loss.item(), global_step)
-            self.env.envs[0].writer.add_scalar("losses/aux/real_value_loss", real_value_loss.item(), global_step)
+    def eval_once(self, iter):
+        # load model based on last training
+        self.actor.load_model(path=self.params.save_path, 
+                              exp_name=self.params.exp_name, 
+                              iter=iter)
+        obs, _ = self.env.reset(seed=self.params.seed)
+        
+        isExit = False
+        global_step = 0
+        while(isExit==False):
+            with torch.no_grad():
+                predict_action,_ = self.actor.get_action(torch.from_numpy(obs).to(self.device), deterministic=True)
+                next_obs, rew, term, trunc, info = self.env.step(predict_action.cpu().numpy())
+            
+            obs = next_obs
+            global_step += 1
 
-        self.env.envs[0].writer.close()
+            if "final_info" in info:
+                for info in info["final_info"]:
+                    if info and "episode" in info:
+                        self.logger.print("info", f"global_step={global_step}, episodic_return={info['episode']['r'].item():.3f}")
+                        self.env.envs[0].writer.add_scalar("charts/eval/episodic_return", info["episode"]["r"], global_step)
+                        self.env.envs[0].writer.add_scalar("charts/eval/episodic_length", info["episode"]["l"], global_step)
+                        isExit=True
+
+        self.env.close()

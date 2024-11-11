@@ -6,12 +6,13 @@ Works on the Following Ubuntu Version :
 - [x] Ubuntu 22.04
 - [x] Ubuntu 24.04
 
-
 Project Progress : 
 - [x] Reinforcement Learning based on Modified [Clean's RL Repo (PPO)](https://github.com/Josh00-Lu/cleanrl/blob/sync/cleanrl/ppo_continuous_action_truncted.py)
-- [ ] Reinforcement Learning based on Clean's RL Repo (SAC)
+- [x] Reinforcement Learning based on Clean's RL Repo and Stable-Baselines3 (SAC)
+- [x] (Bonus) Pendulum application for testing rl algorithm workable inside the Agent controller folder named "pendulum_rl_test.py"
 - [ ] Adversarial Inverse Reinforcement Learning (AIRL) based on [Toshikawa Repo](https://github.com/toshikwa/gail-airl-ppo.pytorch)
 - [ ] Try With Modified AIRL (Confidence Aware IL) based on [Stanford-ILIAD](https://github.com/Stanford-ILIAD/Confidence-Aware-Imitation-Learning)
+
 
 ## Guide:
 ## 1. <Strong>Install Webots R2023b Simulation</strong>
