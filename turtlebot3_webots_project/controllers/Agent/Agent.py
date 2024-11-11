@@ -273,45 +273,70 @@ def customRLProgram():
                                   "name":'rl_ppo'},
                           "every":{"timestep":1e5}}
     
-    params_cfg = {"exp_name"            :   "RL_PPO_Gaussian",
-                  "save_every_reset"    :   False,           # choose one save every reset or save every n step
-                  "save_every_step"     :   True,
-                  "save_step"           :   1e5,             # optional if save every n step or reset true otherwise you can uncomment
-                  "save_path"           :   "./models/RL_PPO",
-                  "seed"                :   12,
-                  "cuda_en"             :   True,
-                  "torch_deterministic" :   True,
-                  "num_steps"           :   2560,
-                  "num_minibatches"     :   256,
-                  "num_epoch"           :   10,
-                  "learning_rate"       :   3e-4,
-                  "activation_fn"       :   th.nn.ReLU,
-                  "anneal_lr"           :   False,
-                  "gamma"               :   agent_settings["gamma"],
-                  "gae_lambda"          :   0.95,
-                  "norm_adv"            :   True,
-                  "clip_coef"           :   0.2,
-                  "clip_vloss"          :   False,
-                  "ent_coef"            :   0.005,
-                  "vf_coef"             :   0.5,
-                  "max_grad_norm"       :   1.0,
-                  "target_kl"           :   None,
-                  "rpo_alpha"           :   0.01,
-                  "distributions"       :   "Normal",
-                  "use_tanh_output"     :   False,
-                  "use_icm"             :   False,
-                  }
+    # params_cfg = {"exp_name"            :   "RL_PPO_Gaussian",
+    #               "save_every_reset"    :   False,           # choose one save every reset or save every n step
+    #               "save_every_step"     :   True,
+    #               "save_step"           :   1e5,             # optional if save every n step or reset true otherwise you can uncomment
+    #               "save_path"           :   "./models/RL_PPO",
+    #               "seed"                :   12,
+    #               "cuda_en"             :   True,
+    #               "torch_deterministic" :   True,
+    #               "num_steps"           :   2560,
+    #               "num_minibatches"     :   256,
+    #               "num_epoch"           :   10,
+    #               "learning_rate"       :   3e-4,
+    #               "activation_fn"       :   th.nn.ReLU,
+    #               "anneal_lr"           :   False,
+    #               "gamma"               :   agent_settings["gamma"],
+    #               "gae_lambda"          :   0.95,
+    #               "norm_adv"            :   True,
+    #               "clip_coef"           :   0.2,
+    #               "clip_vloss"          :   False,
+    #               "ent_coef"            :   0.005,
+    #               "vf_coef"             :   0.5,
+    #               "max_grad_norm"       :   1.0,
+    #               "target_kl"           :   None,
+    #               "rpo_alpha"           :   0.01,
+    #               "distributions"       :   "Normal",
+    #               "use_tanh_output"     :   False,
+    #               "use_icm"             :   False,
+    #               }
 
-    roboAgent = gym.vector.SyncVectorEnv([lambda: Agent( name_exp=params_cfg["exp_name"],
+    roboAgent = gym.vector.SyncVectorEnv([lambda: Agent( name_exp="RL_SAC",
                                                          agent_settings=agent_settings,
                                                          scene_configuration=scene_configuration,
                                                          fixed_steps=True,
                                                          logging_reward=True)])
-
-    model = PPO(env=roboAgent,
-                params_cfg=params_cfg)
-    # model = PPG(roboAgent,
-    #             params_cfg=params_PPG)
+    T = scene_configuration["max_steps"]
+    # try heuristic like on paper https://arxiv.org/pdf/2310.16828.pdf
+    gamma = np.round(np.clip(((T/5)-1)/(T/5), a_min=0.950, a_max=0.995), decimals=3)
+    params_SAC = {"exp_name"            :   "RL_SAC_MountainCarContinuous",
+                "save_every_reset"    :   True,           # choose one save every reset or save every n step
+                "save_every_step"     :   False,
+                "save_step"           :   10,             # optional if save every n step or reset true otherwise you can uncomment
+                "save_path"           :   "./models/RL_SAC_MountainCarContinuous",
+                "seed"                :   1,
+                "cuda_en"             :   True,
+                "torch_deterministic" :   True,
+                "buffer_size"         :   int(1e6),
+                "gamma"               :   gamma,          
+                "tau"                 :   0.005,
+                "batch_size"          :   256,
+                "learning_starts"     :   T*2,
+                "actor_hidden_size"   :   (256, 256),
+                "critic_hidden_size"  :   (256, 256),
+                "actor_activation"    :   th.nn.ReLU,
+                "critic_activation"   :   th.nn.ReLU,
+                "q_lr"                :   1e-3,
+                "policy_lr"           :   3e-4,
+                "policy_frequency"    :   2,
+                "target_network_frequency" : 1,
+                "ent_coef"            :   "auto",           # autotune alpha entropy coefficient, leave true for default, if false set alpha value
+                }
+    # model = PPO(env=roboAgent,
+    #             params_cfg=params_cfg)
+    model = SAC(env=roboAgent,
+                params_cfg=params_SAC)
 
     model.train(total_timesteps=int(256e4))
     

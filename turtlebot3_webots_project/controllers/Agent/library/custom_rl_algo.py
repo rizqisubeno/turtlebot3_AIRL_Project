@@ -3,6 +3,7 @@ import os
 import random
 import time
 
+from copy import deepcopy
 from library.ICM import ICM
 
 import gymnasium as gym
@@ -71,7 +72,7 @@ def layer_init(layer, std=np.sqrt(2), bias_const=0.0):
 class PPO_Agent_NN(nn.Module):
     def __init__(self, 
                  envs,
-                 logger, 
+                 logger: Logger,
                  distribution:str="Normal",
                  rpo_alpha:Union[int, bool]=0.1,
                  activation:Type[nn.Module]=nn.Tanh,
@@ -219,12 +220,12 @@ class PPO():
                                   device=self.device).to(self.device)
         # needed for kl_rollback
         self.target_agent = PPO_Agent_NN(env, 
-                                  logger=self.logger,
-                                  distribution=self.params.distributions,
-                                  rpo_alpha=self.params.rpo_alpha, 
-                                  activation=self.params.activation_fn,
-                                  use_tanh_output=self.params.use_tanh_output,
-                                  device=self.device).to(self.device)
+                                         logger=self.logger,
+                                         distribution=self.params.distributions,
+                                         rpo_alpha=self.params.rpo_alpha, 
+                                         activation=self.params.activation_fn,
+                                         use_tanh_output=self.params.use_tanh_output,
+                                         device=self.device).to(self.device)
         
         self.optimizer = Adam(self.agent.parameters(), lr=self.params.learning_rate, eps=1e-8)
         if (self.params.use_icm):
@@ -579,17 +580,22 @@ class SoftQNetwork(nn.Module):
                  env: gym.Env,
                  logger: Logger,
                  device: Type[torch.device]=None,
+                 hidden_size: tuple = (256, 256),
                  activation: Type[nn.Module]=nn.ReLU):
         super().__init__()
         self.logger = logger
         self.device = device
         layer_list = nn.ModuleList()
+        
         layer_list.append(nn.Linear(np.array(env.single_observation_space.shape).prod() + 
-                                    np.prod(env.single_action_space.shape), 256))
+                                    np.prod(env.single_action_space.shape), hidden_size[0]))
         layer_list.append(activation())
-        layer_list.append(nn.Linear(256, 256))
-        layer_list.append(activation())
-        layer_list.append(nn.Linear(256, 1))
+        
+        for i in range(len(hidden_size)-1):
+            layer_list.append(nn.Linear(hidden_size[i], hidden_size[i+1]))
+            layer_list.append(activation())
+
+        layer_list.append(nn.Linear(hidden_size[-1], 1))
 
         self.q_network = nn.Sequential(*layer_list)
 
@@ -630,19 +636,22 @@ class SAC_Actor(nn.Module):
                  env: gym.Env,
                  logger: Logger,
                  device: Type[torch.device]=None,
+                 hidden_size: tuple = (256, 256),
                  activation: Type[nn.Module]=nn.ReLU):
         super().__init__()
         self.logger = logger
         self.device = device
         layer_list = nn.ModuleList()
-        layer_list.append(nn.Linear(np.array(env.single_observation_space.shape).prod(), 256))
-        layer_list.append(activation())
-        layer_list.append(nn.Linear(256, 256))
+        layer_list.append(nn.Linear(np.array(env.single_observation_space.shape).prod(), hidden_size[0]))
         layer_list.append(activation())
 
+        for i in range(len(hidden_size)-1):
+            layer_list.append(nn.Linear(hidden_size[i], hidden_size[i+1]))
+            layer_list.append(activation())
+
         self.base_nn = nn.Sequential(*layer_list)
-        self.actor_mean = nn.Linear(256, np.prod(env.single_action_space.shape))
-        self.actor_logstd = nn.Linear(256, np.prod(env.single_action_space.shape))
+        self.actor_mean = nn.Linear(hidden_size[-1], np.prod(env.single_action_space.shape))
+        self.actor_logstd = nn.Linear(hidden_size[-1], np.prod(env.single_action_space.shape))
         self.gaussian_actions: Optional[torch.Tensor] = None
 
     def forward(self, state):
@@ -731,24 +740,40 @@ class SAC():
 
         self.logger = Logger()
 
-        self.actor = SAC_Actor(env, self.logger).to(self.device)
-        self.qf1 = SoftQNetwork(env, self.logger).to(self.device)
-        self.qf2 = SoftQNetwork(env, self.logger).to(self.device)
-        self.qf1_target = SoftQNetwork(env, self.logger).to(self.device)
-        self.qf2_target = SoftQNetwork(env, self.logger).to(self.device)
+        self.actor = SAC_Actor(env, 
+                               self.logger, 
+                               hidden_size=self.params.actor_hidden_size, 
+                               activation=self.params.actor_activation).to(self.device)
+        self.qf1 = SoftQNetwork(env, 
+                                self.logger,
+                                hidden_size=self.params.critic_hidden_size, 
+                                activation=self.params.critic_activation).to(self.device)
+        self.qf2 = SoftQNetwork(env, 
+                                self.logger,
+                                hidden_size=self.params.critic_hidden_size, 
+                                activation=self.params.critic_activation).to(self.device)
+        self.qf1_target = deepcopy(self.qf1)
+        self.qf2_target = deepcopy(self.qf2)
         self.qf1_target.load_state_dict(self.qf1.state_dict())
         self.qf2_target.load_state_dict(self.qf2.state_dict())
         self.q_optimizer = torch.optim.Adam(list(self.qf1.parameters()) + list(self.qf2.parameters()), lr=self.params.q_lr)
         self.actor_optimizer = torch.optim.Adam(list(self.actor.parameters()), lr=self.params.policy_lr)
 
+        # Freeze target networks with respect to optimizers (only update via polyak averaging)
+        for p in self.qf1_target.parameters():
+            p.requires_grad = False
+        for p in self.qf2_target.parameters():
+            p.requires_grad = False
+
         # Automatic entropy tuning
-        if self.params.autotune:
-            self.target_entropy = -torch.prod(torch.Tensor(env.single_action_space.shape).to(self.device)).item()
-            self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
-            self.alpha = self.log_alpha.exp().item()
-            self.a_optimizer = torch.optim.Adam([self.log_alpha], lr=self.params.q_lr)
+        if type(self.params.ent_coef)==str:
+            if ("auto" in self.params.ent_coef):
+                self.target_entropy = -torch.prod(torch.Tensor(env.single_action_space.shape).to(self.device)).item()
+                self.log_alpha = torch.zeros(1, requires_grad=True, device=self.device)
+                self.alpha = self.log_alpha.exp().item()
+                self.a_optimizer = torch.optim.Adam([self.log_alpha], lr=self.params.q_lr)
         else:
-            self.alpha = self.params.alpha
+            self.alpha = self.params.ent_coef
 
         env.single_observation_space.dtype = np.float32
         self.buffer = ReplayBuffer(
@@ -762,14 +787,14 @@ class SAC():
         try:
             _ = self.env.unwrapped.writer
             self.logger.print("info", "SummaryWriter Found on Env")
-            self.env.envs[0].writer.add_text(
-                "rl_hyperparameters",
-                "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(self.params).items()])),
-            )
         except AttributeError:
             self.logger.print("info", "Create SummaryWriter inside Env")
             self.env.envs[0].writer = SummaryWriter(f"runs/{self.params.exp_name}")
-
+            
+        self.env.envs[0].writer.add_text(
+                "rl_hyperparameters",
+                "|param|value|\n|-|-|\n%s" % ("\n".join([f"|{key}|{value}|" for key, value in vars(self.params).items()])),
+            )
         self.save_config = "reset" if self.params.save_every_reset else "step"
 
         if("reset" in self.save_config):
@@ -875,15 +900,16 @@ class SAC():
                         actor_loss.backward()
                         self.actor_optimizer.step()
 
-                        if self.params.autotune:
-                            with torch.no_grad():
-                                _, log_pi = self.actor.get_action(data.observations)
-                            alpha_loss = (-self.log_alpha.exp() * (log_pi + self.target_entropy)).mean()
+                        if type(self.params.ent_coef)==str:
+                            if("auto" in self.params.ent_coef):
+                                with torch.no_grad():
+                                    _, log_pi = self.actor.get_action(data.observations)
+                                alpha_loss = (-self.log_alpha.exp() * (log_pi + self.target_entropy)).mean()
 
-                            self.a_optimizer.zero_grad()
-                            alpha_loss.backward()
-                            self.a_optimizer.step()
-                            self.alpha = self.log_alpha.exp().item()
+                                self.a_optimizer.zero_grad()
+                                alpha_loss.backward()
+                                self.a_optimizer.step()
+                                self.alpha = self.log_alpha.exp().item()
 
                 # update the target networks
                 if global_step % self.params.target_network_frequency == 0:
@@ -900,10 +926,11 @@ class SAC():
                     self.env.envs[0].writer.add_scalar("losses/qf_loss", qf_loss.item() / 2.0, global_step)
                     self.env.envs[0].writer.add_scalar("losses/actor_loss", actor_loss.item(), global_step)
                     self.env.envs[0].writer.add_scalar("losses/alpha", self.alpha, global_step)
-                    print("SPS:", int(global_step / (time.time() - start_time)))
+                    # print("SPS:", int(global_step / (time.time() - start_time)))
                     self.env.envs[0].writer.add_scalar("charts/SPS", int(global_step / (time.time() - start_time)), global_step)
-                    if self.params.autotune:
-                        self.env.envs[0].writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
+                    if type(self.params.ent_coef)==str:
+                        if("auto" in self.params.ent_coef):
+                            self.env.envs[0].writer.add_scalar("losses/alpha_loss", alpha_loss.item(), global_step)
 
     def eval_once(self, iter):
         # load model based on last training
