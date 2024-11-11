@@ -9,7 +9,7 @@ Works on the Following Ubuntu Version :
 Project Progress : 
 - [x] Reinforcement Learning based on Modified [Clean's RL Repo (PPO)](https://github.com/Josh00-Lu/cleanrl/blob/sync/cleanrl/ppo_continuous_action_truncted.py)
 - [x] Reinforcement Learning based on [Clean's RL Repo](https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/sac_continuous_action.py) and [Stable-Baselines3 (SAC)](https://github.com/DLR-RM/stable-baselines3/blob/master/stable_baselines3/sac/policies.py)
-- [x] (Bonus) Pendulum application for testing rl algorithm workable inside the Agent controller folder named "pendulum_rl_test.py"
+- [x] (Bonus) Pendulum application for testing rl algorithm workable inside the Agent controller folder named "[pendulum_rl_test.py](./turtlebot3_webots_project/controllers/Agent/pendulum_rl_test.py)"
 - [ ] Adversarial Inverse Reinforcement Learning (AIRL) based on [Toshikawa Repo](https://github.com/toshikwa/gail-airl-ppo.pytorch)
 - [ ] Try With Modified AIRL (Confidence Aware IL) based on [Stanford-ILIAD](https://github.com/Stanford-ILIAD/Confidence-Aware-Imitation-Learning)
 
