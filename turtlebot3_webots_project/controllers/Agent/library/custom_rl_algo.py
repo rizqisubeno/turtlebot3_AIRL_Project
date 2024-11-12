@@ -754,6 +754,9 @@ class SAC():
             self.logger.print("info", "Using Running Statistic Normalization")
             self.env = NormalizeObservation(env,
                                             epsilon=1e-8)
+            # print(f"mean:{self.env.obs_rms.mean=}")
+            # print(f"var:{self.env.obs_rms.var=}")
+            # print(f"count:{self.env.obs_rms.count=}")
         else:
             self.env = env
 
@@ -877,6 +880,14 @@ class SAC():
                     self.actor.save_model(self.params.save_path,
                                           self.params.exp_name,
                                           int(self.save_iter))
+                    if(self.params.use_rsnorm):
+                        path = self.params.save_path
+                        path = path+"/" if path[-1]!="/" else path
+                        last_path = str(os.path.join(path, self.params.exp_name))+f"_norm_{int(self.save_iter)}.npy"
+                        np.savez(last_path, 
+                                 mean=self.env.obs_rms.mean, 
+                                 var=self.env.obs_rms.var, 
+                                 count=self.env.obs_rms.count)
                     
             elif("step" in self.save_config):
                 self.num_timestep += 1
@@ -886,6 +897,14 @@ class SAC():
                     self.actor.save_model(self.params.save_path,
                                           self.params.exp_name,
                                           int(self.save_iter))
+                    if(self.params.use_rsnorm):
+                        path = self.params.save_path
+                        path = path+"/" if path[-1]!="/" else path
+                        last_path = str(os.path.join(path, self.params.exp_name))+f"_norm_{int(self.save_iter)}"
+                        np.savez(last_path, 
+                                 mean=self.env.obs_rms.mean, 
+                                 var=self.env.obs_rms.var, 
+                                 count=self.env.obs_rms.count)
 
             # TRY NOT TO MODIFY: save data to reply buffer; handle `final_observation`
             real_next_obs = next_obs.copy()

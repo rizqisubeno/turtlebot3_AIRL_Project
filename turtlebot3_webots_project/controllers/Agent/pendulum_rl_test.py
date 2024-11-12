@@ -9,7 +9,7 @@ import gymnasium as gym
 from gymnasium.wrappers.record_episode_statistics import RecordEpisodeStatistics
 from gymnasium.wrappers.rescale_action import RescaleAction
 
-training = False
+training = True
 
 # env = gym.make_vec('MountainCarContinuous-v0', num_envs=1, vectorization_mode="sync")
 
@@ -73,7 +73,7 @@ params_SAC = {"exp_name"            :   "RL_SAC_Pendulum",
               "policy_frequency"    :   2,
               "target_network_frequency" : 1,
               "ent_coef"            :   "auto",           # autotune alpha entropy coefficient, leave true for default, if false set alpha value
-              "use_rsnorm"          :   False,
+              "use_rsnorm"          :   True,
              }
 
 env__ = gym.vector.SyncVectorEnv([lambda: RecordEpisodeStatistics(env_)])
