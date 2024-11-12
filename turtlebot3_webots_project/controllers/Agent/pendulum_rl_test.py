@@ -51,11 +51,11 @@ params_PPO = {"exp_name"            :   "RL_PPO_Gaussian",
 T = env.spec.max_episode_steps
 # try heuristic like on paper https://arxiv.org/pdf/2310.16828.pdf
 gamma = np.round(np.clip(((T/5)-1)/(T/5), a_min=0.950, a_max=0.995), decimals=3)
-params_SAC = {"exp_name"            :   "RL_SAC_MountainCarContinuous",
+params_SAC = {"exp_name"            :   "RL_SAC_Pendulum",
               "save_every_reset"    :   True,           # choose one save every reset or save every n step
               "save_every_step"     :   False,
               "save_step"           :   10,             # optional if save every n step or reset true otherwise you can uncomment
-              "save_path"           :   "./models/RL_SAC_MountainCarContinuous",
+              "save_path"           :   "./models/RL_SAC_Pendulum",
               "seed"                :   1,
               "cuda_en"             :   True,
               "torch_deterministic" :   True,
