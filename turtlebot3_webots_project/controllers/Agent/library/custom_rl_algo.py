@@ -24,9 +24,9 @@ from torch.distributions.normal import Normal
 from torch.functional import F
 
 from stable_baselines3.common.buffers import ReplayBuffer
-from library.clipped_gaussian import ClippedGaussian
+from .clipped_gaussian import ClippedGaussian
 
-from library.Simba_Network import * 
+from .Simba_Network import * 
 
 from torch.utils.tensorboard.writer import SummaryWriter
 
@@ -975,7 +975,7 @@ class SAC():
         global_step = 0
         while(isExit==False):
             with torch.no_grad():
-                predict_action,_ = self.actor.get_action(torch.from_numpy(obs).to(self.device), deterministic=True)
+                predict_action,_ = self.actor.get_action(torch.from_numpy(obs).to(self.device).float(), deterministic=True)
                 next_obs, rew, term, trunc, info = self.env.step(predict_action.cpu().numpy())
             
             obs = next_obs
