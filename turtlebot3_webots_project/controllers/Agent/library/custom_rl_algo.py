@@ -7,6 +7,13 @@ from copy import deepcopy
 from library.ICM import ICM
 
 import gymnasium as gym
+import warnings
+
+# Suppress UserWarnings specifically from gymnasium
+warnings.filterwarnings("ignore", category=UserWarning, module="gymnasium")
+
+from gymnasium.wrappers.normalize import NormalizeObservation
+
 import numpy as np
 import torch
 import torch.nn as nn
@@ -18,6 +25,8 @@ from torch.functional import F
 
 from stable_baselines3.common.buffers import ReplayBuffer
 from library.clipped_gaussian import ClippedGaussian
+
+from library.Simba_Network import * 
 
 from torch.utils.tensorboard.writer import SummaryWriter
 
@@ -580,25 +589,32 @@ class SoftQNetwork(nn.Module):
                  env: gym.Env,
                  logger: Logger,
                  device: Type[torch.device]=None,
-                 hidden_size: tuple = (256, 256),
+                 num_blocks: int = 2,
+                 hidden_size: int = 256,
                  activation: Type[nn.Module]=nn.ReLU):
         super().__init__()
         self.logger = logger
         self.device = device
         layer_list = nn.ModuleList()
         
-        layer_list.append(nn.Linear(np.array(env.single_observation_space.shape).prod() + 
-                                    np.prod(env.single_action_space.shape), hidden_size[0]))
-        layer_list.append(activation())
+        # layer_list.append(nn.Linear(np.array(env.single_observation_space.shape).prod() + 
+        #                             np.prod(env.single_action_space.shape), hidden_size[0]))
+        # layer_list.append(activation())
         
-        for i in range(len(hidden_size)-1):
-            layer_list.append(nn.Linear(hidden_size[i], hidden_size[i+1]))
-            layer_list.append(activation())
+        # for i in range(len(hidden_size)-1):
+        #     layer_list.append(nn.Linear(hidden_size[i], hidden_size[i+1]))
+        #     layer_list.append(activation())
 
-        layer_list.append(nn.Linear(hidden_size[-1], 1))
+        # layer_list.append(nn.Linear(hidden_size[-1], 1))
 
+        
+        layer_list.append(SACEncoder(block_type="residual",
+                                    input_dim=env.single_observation_space.shape[0]+env.single_action_space.shape[0],
+                                    num_blocks=num_blocks,
+                                    hidden_dim=hidden_size,))
+        layer_list.append(nn.Linear(hidden_size, 1))
         self.q_network = nn.Sequential(*layer_list)
-
+    
     def forward(self, state, action):
         input = torch.cat([state, action], 1)
         return self.q_network(input)
@@ -636,22 +652,29 @@ class SAC_Actor(nn.Module):
                  env: gym.Env,
                  logger: Logger,
                  device: Type[torch.device]=None,
-                 hidden_size: tuple = (256, 256),
-                 activation: Type[nn.Module]=nn.ReLU):
+                #  hidden_size: tuple = (256),
+                 num_blocks: int = 1,
+                 hidden_size: int = 256,
+                #  activation: Type[nn.Module]=nn.ReLU
+                ):
         super().__init__()
         self.logger = logger
         self.device = device
-        layer_list = nn.ModuleList()
-        layer_list.append(nn.Linear(np.array(env.single_observation_space.shape).prod(), hidden_size[0]))
-        layer_list.append(activation())
+        # layer_list = nn.ModuleList()
+        # layer_list.append(nn.Linear(np.array(env.single_observation_space.shape).prod(), hidden_size[0]))
+        # layer_list.append(activation())
 
-        for i in range(len(hidden_size)-1):
-            layer_list.append(nn.Linear(hidden_size[i], hidden_size[i+1]))
-            layer_list.append(activation())
+        # for i in range(len(hidden_size)-1):
+        #     layer_list.append(nn.Linear(hidden_size[i], hidden_size[i+1]))
+        #     layer_list.append(activation())
 
-        self.base_nn = nn.Sequential(*layer_list)
-        self.actor_mean = nn.Linear(hidden_size[-1], np.prod(env.single_action_space.shape))
-        self.actor_logstd = nn.Linear(hidden_size[-1], np.prod(env.single_action_space.shape))
+        # self.base_nn = nn.Sequential(*layer_list)
+        self.base_nn = SACEncoder(block_type="residual",
+                                  input_dim=env.single_observation_space.shape[0],
+                                  num_blocks=num_blocks,
+                                  hidden_dim=hidden_size,)
+        self.actor_mean = nn.Linear(hidden_size, np.prod(env.single_action_space.shape))
+        self.actor_logstd = nn.Linear(hidden_size, np.prod(env.single_action_space.shape))
         self.gaussian_actions: Optional[torch.Tensor] = None
 
     def forward(self, state):
@@ -723,10 +746,18 @@ class SAC():
                  env,
                  params_cfg):
         
-        self.env = env
-        self.num_envs = 1
-
         self.params = self.read_param_cfg(params_cfg=params_cfg)
+
+        self.logger = Logger()
+        
+        if(self.params.use_rsnorm):
+            self.logger.print("info", "Using Running Statistic Normalization")
+            self.env = NormalizeObservation(env,
+                                            epsilon=1e-8)
+        else:
+            self.env = env
+
+        self.num_envs = 1
 
         # TRY NOT TO MODIFY: seeding
         random.seed(self.params.seed)
@@ -738,20 +769,21 @@ class SAC():
         
         assert isinstance(env.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
-        self.logger = Logger()
-
         self.actor = SAC_Actor(env, 
                                self.logger, 
-                               hidden_size=self.params.actor_hidden_size, 
-                               activation=self.params.actor_activation).to(self.device)
+                               device=self.device,
+                               num_blocks=self.params.policy_num_blocks,
+                               hidden_size=self.params.policy_hidden_size).to(self.device)
         self.qf1 = SoftQNetwork(env, 
                                 self.logger,
-                                hidden_size=self.params.critic_hidden_size, 
-                                activation=self.params.critic_activation).to(self.device)
+                                device=self.device,
+                                num_blocks=self.params.critic_num_blocks,
+                                hidden_size=self.params.critic_hidden_size).to(self.device)
         self.qf2 = SoftQNetwork(env, 
                                 self.logger,
-                                hidden_size=self.params.critic_hidden_size, 
-                                activation=self.params.critic_activation).to(self.device)
+                                device=self.device,
+                                num_blocks=self.params.critic_num_blocks,
+                                hidden_size=self.params.critic_hidden_size).to(self.device)
         self.qf1_target = deepcopy(self.qf1)
         self.qf2_target = deepcopy(self.qf2)
         self.qf1_target.load_state_dict(self.qf1.state_dict())
@@ -800,7 +832,7 @@ class SAC():
         if("reset" in self.save_config):
             self.reset_counter = 0
             self.save_iter = 0
-        elif("step" in self.save_config):
+        elif("sFalsetep" in self.save_config):
             self.num_timestep = 0
             self.save_iter = 0
     
@@ -826,7 +858,7 @@ class SAC():
 
             # TRY NOT TO MODIFY: execute the game and log data.
             next_obs, rewards, terminations, truncations, infos = self.env.step(actions)
-                        
+
             # TRY NOT TO MODIFY: record rewards for plotting purposes
             if "final_info" in infos:
                 for info in infos["final_info"]:

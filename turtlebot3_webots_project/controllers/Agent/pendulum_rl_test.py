@@ -16,8 +16,7 @@ training = True
 
 # for training disable rendering
 env = gym.make("Pendulum-v1",
-               render_mode="human" if not training else "rgb_array",
-               seed=1)
+               render_mode="human" if not training else "rgb_array")
 env_ = RescaleAction(env, min_action=np.array([-2.00]*env.action_space.shape[0]), max_action=np.array([2.00]*env.action_space.shape[0]))
 
 params_PPO = {"exp_name"            :   "RL_PPO_Gaussian",
@@ -65,15 +64,16 @@ params_SAC = {"exp_name"            :   "RL_SAC_MountainCarContinuous",
               "tau"                 :   0.005,
               "batch_size"          :   256,
               "learning_starts"     :   T*2,
-              "actor_hidden_size"   :   (256, 256),
-              "critic_hidden_size"  :   (256, 256),
-              "actor_activation"    :   th.nn.ReLU,
-              "critic_activation"   :   th.nn.ReLU,
+              "policy_num_blocks"   :   1,
+              "critic_num_blocks"   :   2,
+              "policy_hidden_size"  :   256,
+              "critic_hidden_size"  :   256,
               "q_lr"                :   1e-3,
               "policy_lr"           :   3e-4,
               "policy_frequency"    :   2,
               "target_network_frequency" : 1,
               "ent_coef"            :   "auto",           # autotune alpha entropy coefficient, leave true for default, if false set alpha value
+              "use_rsnorm"          :   True,
              }
 
 env__ = gym.vector.SyncVectorEnv([lambda: RecordEpisodeStatistics(env_)])
