@@ -4,7 +4,7 @@ import random
 import time
 
 from copy import deepcopy
-from library.ICM import ICM
+from .ICM import ICM
 
 import gymnasium as gym
 import warnings
@@ -12,7 +12,7 @@ import warnings
 # Suppress UserWarnings specifically from gymnasium
 warnings.filterwarnings("ignore", category=UserWarning, module="gymnasium")
 
-from gymnasium.wrappers.normalize import NormalizeObservation
+from .normalize import NormalizeObservation
 
 import numpy as np
 import torch
@@ -753,10 +753,8 @@ class SAC():
         if(self.params.use_rsnorm):
             self.logger.print("info", "Using Running Statistic Normalization")
             self.env = NormalizeObservation(env,
-                                            epsilon=1e-8)
-            # print(f"mean:{self.env.obs_rms.mean=}")
-            # print(f"var:{self.env.obs_rms.var=}")
-            # print(f"count:{self.env.obs_rms.count=}")
+                                            epsilon=1e-8,
+                                            is_training=True)
         else:
             self.env = env
 
@@ -992,12 +990,13 @@ class SAC():
         if(self.params.use_rsnorm):
             path = self.params.save_path
             path = path+"/" if path[-1]!="/" else path
-            last_path = str(os.path.join(path, self.params.exp_name))+f"_norm_{int(iter)}.npy.npz"
+            last_path = str(os.path.join(path, self.params.exp_name))+f"_norm_{int(iter)}.npz"
             data=np.load(last_path)
             
             self.env.obs_rms.mean = data["mean"]
             self.env.obs_rms.var = data["var"]
             self.env.obs_rms.count = data["count"]
+            self.env.obs_rms.is_training = False
         obs, _ = self.env.reset(seed=self.params.seed)
         
         isExit = False
