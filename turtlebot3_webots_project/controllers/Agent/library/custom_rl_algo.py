@@ -883,7 +883,7 @@ class SAC():
                     if(self.params.use_rsnorm):
                         path = self.params.save_path
                         path = path+"/" if path[-1]!="/" else path
-                        last_path = str(os.path.join(path, self.params.exp_name))+f"_norm_{int(self.save_iter)}.npy"
+                        last_path = str(os.path.join(path, self.params.exp_name))+f"_norm_{int(self.save_iter)}"
                         np.savez(last_path, 
                                  mean=self.env.obs_rms.mean, 
                                  var=self.env.obs_rms.var, 
@@ -901,6 +901,7 @@ class SAC():
                         path = self.params.save_path
                         path = path+"/" if path[-1]!="/" else path
                         last_path = str(os.path.join(path, self.params.exp_name))+f"_norm_{int(self.save_iter)}"
+                        self.env.save
                         np.savez(last_path, 
                                  mean=self.env.obs_rms.mean, 
                                  var=self.env.obs_rms.var, 
@@ -988,6 +989,15 @@ class SAC():
         self.actor.load_model(path=self.params.save_path, 
                               exp_name=self.params.exp_name, 
                               iter=iter)
+        if(self.params.use_rsnorm):
+            path = self.params.save_path
+            path = path+"/" if path[-1]!="/" else path
+            last_path = str(os.path.join(path, self.params.exp_name))+f"_norm_{int(iter)}.npy.npz"
+            data=np.load(last_path)
+            
+            self.env.obs_rms.mean = data["mean"]
+            self.env.obs_rms.var = data["var"]
+            self.env.obs_rms.count = data["count"]
         obs, _ = self.env.reset(seed=self.params.seed)
         
         isExit = False

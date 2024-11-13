@@ -9,7 +9,7 @@ import gymnasium as gym
 from gymnasium.wrappers.record_episode_statistics import RecordEpisodeStatistics
 from gymnasium.wrappers.rescale_action import RescaleAction
 
-training = True
+training = False
 
 # env = gym.make_vec('MountainCarContinuous-v0', num_envs=1, vectorization_mode="sync")
 
