@@ -835,7 +835,7 @@ class SAC():
         if("reset" in self.save_config):
             self.reset_counter = 0
             self.save_iter = 0
-        elif("sFalsetep" in self.save_config):
+        elif("step" in self.save_config):
             self.num_timestep = 0
             self.save_iter = 0
     
