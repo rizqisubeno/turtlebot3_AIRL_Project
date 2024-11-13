@@ -1,4 +1,4 @@
-# docs and experiment results can be found at https://docs.cleanrl.dev/rl-algorithms/rpo/#rpo_continuous_actionpy
+# try using configuration with hydra-core
 import os
 import random
 import time
@@ -14,12 +14,14 @@ warnings.filterwarnings("ignore", category=UserWarning, module="gymnasium")
 
 from .normalize import NormalizeObservation
 
+from omegaconf import OmegaConf
+import hydra
+
 import numpy as np
 import torch
 import torch.nn as nn
 from torch.optim.adam import Adam
 # import tyro
-from torch import distributions as td
 from torch.distributions.normal import Normal
 from torch.functional import F
 
@@ -197,11 +199,13 @@ class PPO_Agent_NN(nn.Module):
 class PPO():
     def __init__(self,
                  env,
-                 params_cfg):
+                 config_path: str,
+                 config_name: str):
         
         self.env = env
         self.num_envs = 1
 
+        params_cfg = self.hydra_params_read(config_path, config_name)
         self.params = self.read_param_cfg(params_cfg=params_cfg)
 
         self.batch_size = self.num_envs * self.params.num_steps 
@@ -267,6 +271,16 @@ class PPO():
         elif("step" in self.save_config):
             self.num_timestep = 0
             self.save_iter = 0
+
+    def hydra_params_read(config_path: str,
+                          config_name: str):
+        # initialize hydra and load the configuration
+        with hydra.initialize(config_path=config_path,
+                              version_base="1.2"):
+            cfg = hydra.compose(config_name=config_name)
+        cfg = OmegaConf.to_object(cfg)
+
+        return cfg
 
     def read_param_cfg(self, params_cfg, verbose:Optional[bool]=False):
         cfg_namespace = SimpleNamespace(**params_cfg)
@@ -639,10 +653,8 @@ class SoftQNetwork(nn.Module):
         self.logger.print("info", f"Q-Net Model loaded from {path}")
 
 LOG_STD_MAX = 2
-
 #default from cleanrl
 #LOG_STD_MIN = -5
-
 #default from stable-baselines3
 LOG_STD_MIN = -20
 
@@ -744,8 +756,10 @@ class SAC_Actor(nn.Module):
 class SAC():
     def __init__(self,
                  env,
-                 params_cfg):
+                 config_path: str,
+                 config_name: str):
         
+        params_cfg = self.hydra_params_read(config_path, config_name)
         self.params = self.read_param_cfg(params_cfg=params_cfg)
 
         self.logger = Logger()
@@ -836,6 +850,16 @@ class SAC():
         elif("step" in self.save_config):
             self.num_timestep = 0
             self.save_iter = 0
+    
+    def hydra_params_read(config_path: str,
+                          config_name: str):
+        # initialize hydra and load the configuration
+        with hydra.initialize(config_path=config_path,
+                              version_base="1.2"):
+            cfg = hydra.compose(config_name=config_name)
+        cfg = OmegaConf.to_object(cfg)
+
+        return cfg
     
     def read_param_cfg(self, params_cfg, verbose:Optional[bool]=False):
         cfg_namespace = SimpleNamespace(**params_cfg)
