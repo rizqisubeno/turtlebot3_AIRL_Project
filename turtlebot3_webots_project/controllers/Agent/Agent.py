@@ -323,15 +323,16 @@ def customRLProgram():
                 "tau"                 :   0.005,
                 "batch_size"          :   256,
                 "learning_starts"     :   T*2,
-                "actor_hidden_size"   :   (256, 256),
-                "critic_hidden_size"  :   (256, 256),
-                "actor_activation"    :   th.nn.ReLU,
-                "critic_activation"   :   th.nn.ReLU,
+                "policy_num_blocks"   :   1,
+                "critic_num_blocks"   :   2,
+                "policy_hidden_size"  :   256,
+                "critic_hidden_size"  :   256,
                 "q_lr"                :   1e-3,
                 "policy_lr"           :   3e-4,
                 "policy_frequency"    :   2,
                 "target_network_frequency" : 1,
                 "ent_coef"            :   "auto",           # autotune alpha entropy coefficient, leave true for default, if false set alpha value
+                "use_rsnorm"          :   True,
                 }
     # model = PPO(env=roboAgent,
     #             params_cfg=params_cfg)
