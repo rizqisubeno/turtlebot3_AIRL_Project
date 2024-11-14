@@ -15,6 +15,7 @@ warnings.filterwarnings("ignore", category=UserWarning, module="gymnasium")
 from .normalize import NormalizeObservation
 
 from omegaconf import OmegaConf
+from hydra.utils import instantiate
 import hydra
 
 import numpy as np
@@ -38,6 +39,13 @@ from types import SimpleNamespace
 # from library.tb3_agent import logger
 import logging
 from colorlog import ColoredFormatter
+LOG_LEVEL = logging.DEBUG
+LOGFORMAT = "  %(log_color)s%(levelname)-8s%(reset)s | %(log_color)s%(message)s%(reset)s"
+logging.root.setLevel(LOG_LEVEL)
+formatter = ColoredFormatter(LOGFORMAT)
+stream = logging.StreamHandler()
+stream.setLevel(LOG_LEVEL)
+stream.setFormatter(formatter)
 
 distribution_classes = {
     'Normal': Normal,
@@ -46,13 +54,6 @@ distribution_classes = {
 
 class Logger():
     def __init__(self):
-        LOG_LEVEL = logging.DEBUG
-        LOGFORMAT = "  %(log_color)s%(levelname)-8s%(reset)s | %(log_color)s%(message)s%(reset)s"
-        logging.root.setLevel(LOG_LEVEL)
-        formatter = ColoredFormatter(LOGFORMAT)
-        stream = logging.StreamHandler()
-        stream.setLevel(LOG_LEVEL)
-        stream.setFormatter(formatter)
         self.log = logging.getLogger('pythonConfig')
         self.log.setLevel(LOG_LEVEL)
         self.log.addHandler(stream)
@@ -91,7 +92,13 @@ class PPO_Agent_NN(nn.Module):
                  device:Optional[torch.device]=None):
         super().__init__()
         self.device = device
-        self.rpo_alpha = rpo_alpha
+        # if bool usually set as False
+        # if not boolean, automatically set rpo_mode true with value on rpo_alpha
+        if(type(rpo_alpha)==bool):
+            self.rpo_mode = rpo_alpha
+        else:
+            self.rpo_mode = True
+            self.rpo_alpha = rpo_alpha
         self.logger = logger
         self.envs = envs
         if distribution not in distribution_classes:
@@ -104,17 +111,17 @@ class PPO_Agent_NN(nn.Module):
 
         self.critic = nn.Sequential(
             layer_init(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
-            activation(),
+            activation,
             layer_init(nn.Linear(64, 64)),
-            activation(),
+            activation,
             layer_init(nn.Linear(64, 1), std=1.0),
         )
 
-        actor_layer = [nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64), activation()]
+        actor_layer = [nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64), activation]
         actor_layer.append(layer_init(nn.Linear(64, 64)))
-        actor_layer.append(activation())
+        actor_layer.append(activation)
         actor_layer.append(layer_init(nn.Linear(64, np.prod(envs.single_action_space.shape)), std=0.01))
-        actor_layer.append(activation()) if use_tanh_output else None
+        actor_layer.append(activation) if use_tanh_output else None
         
         self.actor_mean = nn.Sequential(*actor_layer)
         # print(f"{self.actor_mean}")
@@ -144,7 +151,7 @@ class PPO_Agent_NN(nn.Module):
         return action        
 
     # RPO_Mode is Robust Policy Optimization Mode
-    def get_action_and_value(self, x, action=None, RPO_Mode:Optional[bool]=False):
+    def get_action_and_value(self, x, action=None):
         action_mean = self.actor_mean(x)
         action_logstd = self.actor_logstd.expand_as(action_mean)
         action_std = torch.exp(action_logstd)
@@ -158,7 +165,7 @@ class PPO_Agent_NN(nn.Module):
                                     high=self.high)
         if action is None:
             action = probs.sample()
-        elif RPO_Mode:  # new to RPO
+        elif self.rpo_mode:  # new to RPO
             # sample again to add stochasticity to the policy
             z = torch.FloatTensor(action_mean.shape).uniform_(-self.rpo_alpha, self.rpo_alpha).to(self.device)
             action_mean = action_mean + z
@@ -202,6 +209,8 @@ class PPO():
                  config_path: str,
                  config_name: str):
         
+        self.logger = Logger()
+
         self.env = env
         self.num_envs = 1
 
@@ -221,14 +230,12 @@ class PPO():
         
         assert isinstance(env.single_action_space, gym.spaces.Box), "only continuous action space is supported"
 
-        self.logger = Logger()
-
         # Initialize PPO_Agent_NN Function
         self.agent = PPO_Agent_NN(env, 
                                   logger=self.logger,
                                   distribution=self.params.distributions,
                                   rpo_alpha=self.params.rpo_alpha, 
-                                  activation=self.params.activation_fn,
+                                  activation=instantiate(self.params.activation_fn),
                                   use_tanh_output=self.params.use_tanh_output,
                                   device=self.device).to(self.device)
         # needed for kl_rollback
@@ -236,7 +243,7 @@ class PPO():
                                          logger=self.logger,
                                          distribution=self.params.distributions,
                                          rpo_alpha=self.params.rpo_alpha, 
-                                         activation=self.params.activation_fn,
+                                         activation=instantiate(self.params.activation_fn),
                                          use_tanh_output=self.params.use_tanh_output,
                                          device=self.device).to(self.device)
         
@@ -272,20 +279,37 @@ class PPO():
             self.num_timestep = 0
             self.save_iter = 0
 
-    def hydra_params_read(config_path: str,
+    def hydra_params_read(self,
+                          config_path: str,
                           config_name: str):
+        config_path = "."+config_path if config_path[:2]=="./" else \
+                      "../"+config_path if config_path[:1]!="." else \
+                      config_path
         # initialize hydra and load the configuration
         with hydra.initialize(config_path=config_path,
                               version_base="1.2"):
             cfg = hydra.compose(config_name=config_name)
         cfg = OmegaConf.to_object(cfg)
 
-        return cfg
+        #re-formatted dict
+        new_cfg = {}
+        for item in cfg.keys():
+            if(type(cfg[item])==dict):
+                for sub_item in cfg[item].keys():
+                    new_cfg[sub_item] = cfg[item][sub_item]
+            else:
+                new_cfg[item] = cfg[item]
+        
+        #validating variable type
+        # if(isinstance(new_cfg["buffer_size"], float)):
+        #     new_cfg["buffer_size"] = int(new_cfg["buffer_size"])
+            
+        return new_cfg
 
-    def read_param_cfg(self, params_cfg, verbose:Optional[bool]=False):
+    def read_param_cfg(self, params_cfg, verbose:Optional[bool]=True):
         cfg_namespace = SimpleNamespace(**params_cfg)
         if(verbose):
-            for key, val in cfg_namespace.items():
+            for key, val in params_cfg.items():
                 self.logger.print("info", f"{key} :\t{val}")
         return cfg_namespace 
     
@@ -759,10 +783,10 @@ class SAC():
                  config_path: str,
                  config_name: str):
         
+        self.logger = Logger()
+        
         params_cfg = self.hydra_params_read(config_path, config_name)
         self.params = self.read_param_cfg(params_cfg=params_cfg)
-
-        self.logger = Logger()
         
         if(self.params.use_rsnorm):
             self.logger.print("info", "Using Running Statistic Normalization")
@@ -822,7 +846,7 @@ class SAC():
         else:
             self.alpha = self.params.ent_coef
 
-        env.single_observation_space.dtype = np.float32
+        self.env.single_observation_space.dtype = np.float32
         self.buffer = ReplayBuffer(
                                    buffer_size=self.params.buffer_size,
                                    observation_space=self.env.single_observation_space,
@@ -851,20 +875,37 @@ class SAC():
             self.num_timestep = 0
             self.save_iter = 0
     
-    def hydra_params_read(config_path: str,
+    def hydra_params_read(self,
+                          config_path: str,
                           config_name: str):
+        config_path = "."+config_path if config_path[:2]=="./" else \
+                      "../"+config_path if config_path[:1]!="." else \
+                      config_path
         # initialize hydra and load the configuration
         with hydra.initialize(config_path=config_path,
                               version_base="1.2"):
             cfg = hydra.compose(config_name=config_name)
         cfg = OmegaConf.to_object(cfg)
 
-        return cfg
+        #re-formatted dict
+        new_cfg = {}
+        for item in cfg.keys():
+            if(type(cfg[item])==dict):
+                for sub_item in cfg[item].keys():
+                    new_cfg[sub_item] = cfg[item][sub_item]
+            else:
+                new_cfg[item] = cfg[item]
+        
+        #validating variable type
+        if(isinstance(new_cfg["buffer_size"], float)):
+            new_cfg["buffer_size"] = int(new_cfg["buffer_size"])
+
+        return new_cfg
     
-    def read_param_cfg(self, params_cfg, verbose:Optional[bool]=False):
+    def read_param_cfg(self, params_cfg, verbose:Optional[bool]=True):
         cfg_namespace = SimpleNamespace(**params_cfg)
         if(verbose):
-            for key, val in cfg_namespace.items():
+            for key, val in params_cfg.items():
                 self.logger.print("info", f"{key} :\t{val}")
         return cfg_namespace  
 

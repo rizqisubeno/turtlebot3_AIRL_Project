@@ -253,7 +253,8 @@ def agent_checker():
         if terminated or truncated: 
             observation, info = roboAgent.reset()
             
-def customRLProgram():
+def customRLProgram(algo:str,
+                    exp_name:str,):
     agent_settings = {"goal_dist": 0.11, # in meter
                       "collision_dist": 0.12, # in meter
                       "lidar_for_state": 9,  # number of state lidar read (default=10)
@@ -265,84 +266,26 @@ def customRLProgram():
                            "random_start": False, # whether start from x and y coordinate random or not
                            "max_steps": 1280,    # set to maximum integer value
                           }
-    
-    eval_configuration = {"eval":{"enable":True,            # do the evaluation and print the result
-                                  "save_result":True},
-                          "save":{"enable":True,            # do save the model every n-step
-                                  "path":'./RL_Model',
-                                  "name":'rl_ppo'},
-                          "every":{"timestep":1e5}}
-    
-    # params_cfg = {"exp_name"            :   "RL_PPO_Gaussian",
-    #               "save_every_reset"    :   False,           # choose one save every reset or save every n step
-    #               "save_every_step"     :   True,
-    #               "save_step"           :   1e5,             # optional if save every n step or reset true otherwise you can uncomment
-    #               "save_path"           :   "./models/RL_PPO",
-    #               "seed"                :   12,
-    #               "cuda_en"             :   True,
-    #               "torch_deterministic" :   True,
-    #               "num_steps"           :   2560,
-    #               "num_minibatches"     :   256,
-    #               "num_epoch"           :   10,
-    #               "learning_rate"       :   3e-4,
-    #               "activation_fn"       :   th.nn.ReLU,
-    #               "anneal_lr"           :   False,
-    #               "gamma"               :   agent_settings["gamma"],
-    #               "gae_lambda"          :   0.95,
-    #               "norm_adv"            :   True,
-    #               "clip_coef"           :   0.2,
-    #               "clip_vloss"          :   False,
-    #               "ent_coef"            :   0.005,
-    #               "vf_coef"             :   0.5,
-    #               "max_grad_norm"       :   1.0,
-    #               "target_kl"           :   None,
-    #               "rpo_alpha"           :   0.01,
-    #               "distributions"       :   "Normal",
-    #               "use_tanh_output"     :   False,
-    #               "use_icm"             :   False,
-    #               }
 
-    roboAgent = gym.vector.SyncVectorEnv([lambda: Agent( name_exp="RL_SAC",
+    roboAgent = gym.vector.SyncVectorEnv([lambda: Agent( name_exp=exp_name,
                                                          agent_settings=agent_settings,
                                                          scene_configuration=scene_configuration,
                                                          fixed_steps=True,
                                                          logging_reward=True)])
-    T = scene_configuration["max_steps"]
-    # try heuristic like on paper https://arxiv.org/pdf/2310.16828.pdf
-    gamma = np.round(np.clip(((T/5)-1)/(T/5), a_min=0.950, a_max=0.995), decimals=3)
-    params_SAC = {"exp_name"          :   "RL_SAC",
-                "save_every_reset"    :   True,           # choose one save every reset or save every n step
-                "save_every_step"     :   False,
-                "save_step"           :   10,             # optional if save every n step or reset true otherwise you can uncomment
-                "save_path"           :   "./models/RL_SAC",
-                "seed"                :   1,
-                "cuda_en"             :   True,
-                "torch_deterministic" :   True,
-                "buffer_size"         :   int(1e6),
-                "gamma"               :   gamma,          
-                "tau"                 :   0.005,
-                "batch_size"          :   256,
-                "learning_starts"     :   T*2,
-                "policy_num_blocks"   :   1,
-                "critic_num_blocks"   :   2,
-                "policy_hidden_size"  :   256,
-                "critic_hidden_size"  :   256,
-                "q_lr"                :   1e-3,
-                "policy_lr"           :   3e-4,
-                "policy_frequency"    :   2,
-                "target_network_frequency" : 1,
-                "ent_coef"            :   "auto",           # autotune alpha entropy coefficient, leave true for default, if false set alpha value
-                "use_rsnorm"          :   True,
-                }
-    # model = PPO(env=roboAgent,
-    #             params_cfg=params_cfg)
-    model = SAC(env=roboAgent,
-                params_cfg=params_SAC)
 
-    model.train(total_timesteps=int(256e4))
-    
-    # # reset the environment
-    # roboAgent.env_fns[0]().agent.simulationReset()
+    if algo == "PPO":
+        model = PPO(env=roboAgent,
+                    config_path="./config",
+                    config_name=exp_name)
+        model.train(total_timesteps=int(256e4))
+    elif algo == "SAC":
+        model = SAC(env=roboAgent,
+                    config_path="./config",
+                    config_name=exp_name)
+        model.train(total_timesteps=int(256e4))
+    else:
+        sys.exit("Algorithm not found")
+
 
 def refining_demonstration():
 
@@ -455,7 +398,14 @@ if __name__ == "__main__":
     # RL Training using Advanced Callback to track SR (Success Rate)
     # RL_Training() #not used again please use CustomRLPrograms
     
-    customRLProgram()
+    # Custom RL Programs using PPO or SAC
+    # using exp_name matched the configuration on config folder
+    # customRLProgram(algo="SAC", 
+    #                 exp_name="rl_sac")
+    # customRLProgram(algo="PPO", 
+    #                 exp_name="rl_ppo_gaussian")
+    customRLProgram(algo="PPO",
+                    exp_name="rl_ppo_clippedgaussian")
 
 
         

@@ -3,9 +3,10 @@ numpy
 matplotlib
 torch
 tensorboard
-gymnasium
-stable-baselines3
+gymnasium==0.29.1
+stable-baselines3==2.3.2
 sb3_contrib
-imitation
+imitation==1.0.0
 google-api-python-client
+hydra-core==1.3.2
 

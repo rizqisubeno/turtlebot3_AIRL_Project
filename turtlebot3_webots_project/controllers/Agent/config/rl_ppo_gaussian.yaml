@@ -1,0 +1,5 @@
+defaults:
+  - _self_
+  - rl_config: ppo_gaussian
+
+exp_name: rl_ppo_gaussian

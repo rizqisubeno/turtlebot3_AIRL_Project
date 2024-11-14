@@ -1,0 +1,63 @@
+name: SAC
+
+#choose one save every reset or save every n step
+save_every_reset: True
+save_every_step: False
+
+#optional if save every n step or reset true otherwise you can uncomment
+save_step: 10
+
+#save path
+save_path: ./models/RL_SAC
+
+#seed
+seed: 1
+
+#enable nvidia cuda processing
+cuda_en: 1
+
+#enable torch deterministic
+torch_deterministic: True
+
+#discount factor (gamma)
+# T = scene_configuration["max_steps"]
+# try heuristic like on paper https://arxiv.org/pdf/2310.16828.pdf
+# gamma = np.round(np.clip(((T/5)-1)/(T/5), a_min=0.950, a_max=0.995), decimals=3)
+gamma: 0.995
+
+#number rollout buffer
+buffer_size: 1e6
+
+#target smoothing coefficient (default 0.005)
+tau: 0.005
+
+#number of batch size apply sample
+batch_size: 256
+
+#timestep to start learning (before this, sac will sample action to fill the buffer until timestep learning start)
+learning_starts: 2560
+
+#SimBa Network Param Config
+policy_num_blocks: 1
+critic_num_blocks: 2
+policy_hidden_size: 256
+critic_hidden_size: 256
+
+#Soft Q-Net Learning rate
+q_lr: 1e-3
+
+#Policy Network Learning rate
+policy_lr: 3e-4
+
+#the frequency of training policy (delayed)
+policy_frequency: 2
+
+#the frequency of updates for the target nerworks
+target_network_frequency: 1
+
+#entropy coefficient (also known alpha regulation coefficient on inside algorithm)
+#leave auto to auto-learning the alpha param, if not please use specific value like 0.1 or 0.2
+ent_coef: auto
+
+#Use Running Statistics Normalization (RSNorm->Running Mean Std)
+use_rsnorm: True

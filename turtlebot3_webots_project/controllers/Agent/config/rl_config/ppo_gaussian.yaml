@@ -1,0 +1,87 @@
+name: PPO_Gaussian
+
+#choose one save every reset or save every n step
+save_every_reset: True
+save_every_step: False
+
+#optional if save every n step or reset true otherwise you can uncomment
+save_step: 10
+
+#save path
+save_path: ./models/RL_PPO_Gaussian
+
+#seed
+seed: 1
+
+#enable nvidia cuda processing
+cuda_en: 1
+
+#enable torch deterministic
+torch_deterministic: True
+
+#discount factor (gamma)
+gamma: 0.995
+
+#number steps rollout before update policy (PPO)
+num_steps: 2560
+
+#number of minibatches
+num_minibatches: 256
+
+#number of epoch (default:10, try with num : 1-20)
+num_epoch: 10
+
+# learning rate Adam
+learning_rate: 3e-4
+
+#activation function
+activation_fn:
+  _target_: torch.nn.Tanh
+
+#annealling learning rate
+anneal_lr: False
+
+#generalized advantages estimation (GAE) lambda
+gae_lambda: 0.95
+
+#normalized advantages
+norm_adv: True
+
+#clip coefficient in PPO's objective
+clip_coef: 0.2
+
+#clip coefficient of value loss
+clip_vloss: False
+
+#Entropy Coefficient 
+ent_coef: 0.005
+
+#Value coefficient for update policy
+vf_coef: 0.5
+
+#maximum gradient norm
+max_grad_norm: 1.0
+
+#Use Robust Policy Optimization (choose between 0.01 - 0.5)
+#if not used, select False
+rpo_alpha: False
+
+#target KL Divergence 
+target_kl: 0.15
+
+#use tanh output
+use_tanh_output: False
+
+#Use policy distribution (Gaussian->"Normal", Clipped Gaussian->"ClippedGaussian")
+distributions: Normal
+
+#use Intrinsic Curiosity Module (Work-in Progress this feature not recommend to use because use from start until training end)
+use_icm: False
+
+#stopping update policy if KL exceeds target-kl 
+kle_stop: False
+
+#rollback previous policy if KL exceeds target-kl
+kle_rolback: True
+
+

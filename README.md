@@ -55,6 +55,7 @@ Project Progress :
   #You can add on ~/.bashrc if you bash; if you zsh, you can add on ~/.zshrc
   export WEBOTS_HOME="/usr/local/webots"
   export LD_LIBRARY_PATH=$LD_LIBRARY_PATH:$WEBOTS_HOME/lib/controller
+  export PATH="$WEBOTS_HOME:$PATH"  # if you want use webots-controller 
 
   #Optional
   export ROS_DISTRO={your_ros2_distro_name}

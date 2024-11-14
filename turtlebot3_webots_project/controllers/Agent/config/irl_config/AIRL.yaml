@@ -1,0 +1,19 @@
+name: AIRL
+
+#buffer experience class
+buffer_exp: SerializedBuffer
+
+#times for rollout buffer to mix
+mix_buffer: 1
+
+#random seed number
+seed: 23
+
+#discount factor (gamma)
+gamma: 0.995
+
+#learning rate for discriminator
+lr_disc: 3.0e-4
+
+#update period for discriminator 
+epoch_disc: 2
