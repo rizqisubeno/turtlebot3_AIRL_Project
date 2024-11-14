@@ -7,3 +7,8 @@
 /ros2_irl_ws/log
 /ros2_irl_ws/install
 /ros2_irl_ws/build
+/turtlebot3_webots_project/controllers/Agent/Agent.bckp
+/turtlebot3_webots_project/controllers/Agent/bc_model.pth
+/turtlebot3_webots_project/controllers/Agent/clipped_gauss_chainer.py
+/turtlebot3_webots_project/controllers/Agent/clipped_gauss_test.py
+/turtlebot3_webots_project/controllers/Agent/demonstration_tuning.ipynb
