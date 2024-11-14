@@ -9,4 +9,5 @@ sb3_contrib
 imitation==1.0.0
 google-api-python-client
 hydra-core==1.3.2
+colorlog
 
