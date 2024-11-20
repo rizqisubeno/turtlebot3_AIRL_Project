@@ -7,7 +7,7 @@ Works on the Following Ubuntu Version :
 - [x] Ubuntu 24.04
 
 Project Progress : 
-- [x] Reinforcement Learning based on Modified [Clean's RL Repo (PPO)](https://github.com/Josh00-Lu/cleanrl/blob/sync/cleanrl/ppo_continuous_action_truncted.py)
+- [x] Reinforcement Learning based on Modified [Clean's RL Repo (PPO)](https://github.com/Josh00-Lu/cleanrl/blob/sync/cleanrl/ppo_continuous_action_truncted.py) and KL-rollback [code](https://wandb.ai/cleanrl/ppo-kle/runs/pozrklmi/files/code/cleanrl/ppo_continuous_action.py)
 - [x] Reinforcement Learning based on Modified [Clean's RL Repo](https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/sac_continuous_action.py), [Stable-Baselines3 (SAC)](https://github.com/DLR-RM/stable-baselines3/blob/master/stable_baselines3/sac/policies.py) and NN Model using [SimBa Network](https://github.com/SonyResearch/simba)
 - [x] (Bonus) Pendulum application for testing rl algorithm workable inside the Agent controller folder named "[pendulum_rl_test.py](./turtlebot3_webots_project/controllers/Agent/pendulum_rl_test.py)"
 - [x] (Bonus) Adding New Policy Clipped Gaussian based on [CAPG](https://github.com/pfnet-research/capg) in [this file](./turtlebot3_webots_project/controllers/Agent/library/custom_rl_algo.py#L44)
