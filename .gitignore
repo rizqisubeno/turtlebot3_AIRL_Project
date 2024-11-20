@@ -40,3 +40,7 @@ turtlebot3_webots_project/controllers/Agent/clipped_gauss_chainer.py
 turtlebot3_webots_project/controllers/Agent/bc_model.pth
 turtlebot3_webots_project/controllers/Agent/Agent.bckp
 /turtlebot3_webots_project/controllers/Agent/__pycache__
+/turtlebot3_webots_project/controllers/Agent/runs/rl_airl
+/turtlebot3_webots_project/controllers/Agent/runs/airl
+/turtlebot3_webots_project/controllers/Agent/runs/airl_rl_ppo
+/turtlebot3_webots_project/controllers/Agent/runs/AIRL_PPO

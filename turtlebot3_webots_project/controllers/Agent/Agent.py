@@ -13,6 +13,8 @@ from library.tb3_agent_callback import *
 from library.custom_rl_algo import *
 from library.BC_Net import modelNet
 
+from library.Imitation.AIRL import AIRL
+
 # Gymnasium Library module
 import gymnasium as gym
 
@@ -20,9 +22,6 @@ import numpy as np
 
 # RL Library
 # from stable_baselines3 import PPO, SAC
-from sb3_contrib import RecurrentPPO
-from stable_baselines3.common.env_util import make_vec_env
-
 from scipy import signal
 
 def scale_value(value, input_min, input_max, output_min, output_max):
@@ -286,6 +285,30 @@ def customRLProgram(algo:str,
     else:
         sys.exit("Algorithm not found")
 
+def CustomAIRLProgram(exp_name:str):
+    agent_settings = {"goal_dist": 0.11, # in meter
+                      "collision_dist": 0.12, # in meter
+                      "lidar_for_state": 9,  # number of state lidar read (default=10)
+                      "gamma": 0.993,
+                      }  
+    
+    scene_configuration = {"change_scene_every_goal_reach": 5, # change the scenario every n goal reach
+                           "scene_start_from": 0, # scene start from n
+                           "random_start": False, # whether start from x and y coordinate random or not
+                           "max_steps": 1280,    # set to maximum integer value
+                          }
+
+    roboAgent = gym.vector.SyncVectorEnv([lambda: Agent( name_exp=exp_name,
+                                                         agent_settings=agent_settings,
+                                                         scene_configuration=scene_configuration,
+                                                         fixed_steps=True,
+                                                         logging_reward=True)])
+
+    model = AIRL(env=roboAgent,
+                 config_path="config",
+                 config_name=exp_name)
+    # model.train(total_timesteps=int(256e4))
+
 
 def refining_demonstration():
 
@@ -402,10 +425,14 @@ if __name__ == "__main__":
     # using exp_name matched the configuration on config folder
     # customRLProgram(algo="SAC", 
     #                 exp_name="rl_sac")
-    # customRLProgram(algo="PPO", 
-    #                 exp_name="rl_ppo_gaussian")
-    customRLProgram(algo="PPO",
-                    exp_name="rl_ppo_clippedgaussian")
+    customRLProgram(algo="PPO", 
+                    exp_name="rl_ppo_gaussian")
+    # customRLProgram(algo="PPO",
+    #                 exp_name="rl_ppo_clippedgaussian")
+
+    # Here we go, Custom IRL Program (AIRL)
+    # CustomAIRLProgram(exp_name="airl")
+
 
 
         

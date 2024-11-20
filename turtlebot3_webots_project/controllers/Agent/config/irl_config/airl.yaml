@@ -1,0 +1,36 @@
+name: airl
+
+#enable nvidia cuda processing
+cuda_en: 1
+
+#buffer experience class
+buffer_exp: 
+  _target_: library.Imitation.buffer.Buffer
+
+#random seed number
+seed: 1
+
+#discount factor (gamma)
+gamma: 0.995
+
+#Optimizer for discriminator
+disc_optimizer:
+  _target_: torch.optim.adam.Adam
+  lr: 3.0e-4
+
+#update period for discriminator 
+epoch_disc: 10
+
+#batch size
+batch_size: 64
+
+units_disc_r:
+- [100, 100]
+
+units_disc_v:
+- [100, 100]
+
+
+
+
+

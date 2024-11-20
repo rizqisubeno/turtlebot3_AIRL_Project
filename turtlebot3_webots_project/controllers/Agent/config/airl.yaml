@@ -1,0 +1,6 @@
+defaults:
+  - _self_
+  - rl_config: ppo_gaussian
+  - irl_config: airl
+
+exp_name: airl

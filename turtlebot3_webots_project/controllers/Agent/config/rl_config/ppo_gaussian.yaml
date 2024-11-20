@@ -26,13 +26,16 @@ gamma: 0.995
 num_steps: 2560
 
 #number of minibatches
-num_minibatches: 256
+num_minibatches: 40
 
 #number of epoch (default:10, try with num : 1-20)
 num_epoch: 10
 
-# learning rate Adam
-learning_rate: 3e-4
+# optimizer Adam
+optimizer:
+  _target_: torch.optim.adam.Adam
+  lr: 3e-4
+  eps: 1e-8
 
 #activation function
 activation_fn:
@@ -82,6 +85,6 @@ use_icm: False
 kle_stop: False
 
 #rollback previous policy if KL exceeds target-kl
-kle_rolback: True
+kle_rollback: True
 
 
