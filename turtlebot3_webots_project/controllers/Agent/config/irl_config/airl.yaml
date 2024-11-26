@@ -22,7 +22,7 @@ disc_optimizer:
 epoch_disc: 10
 
 #batch size
-batch_size: 64
+batch_size: 256
 
 units_disc_r:
 - [100, 100]

@@ -52,3 +52,6 @@ turtlebot3_webots_project/controllers/Agent/Agent.bckp
 /turtlebot3_webots_project/controllers/Agent/library/Imitation/__pycache__
 /turtlebot3_webots_project/controllers/Agent/library/Imitation/__pycache__
 /turtlebot3_webots_project/controllers/Agent/library/Imitation/__pycache__
+/turtlebot3_webots_project/controllers/Agent/models
+/turtlebot3_webots_project/controllers/Agent/models/RL_PPO_Gaussian
+/turtlebot3_webots_project/controllers/Agent/models/RL_PPO_Gaussian
