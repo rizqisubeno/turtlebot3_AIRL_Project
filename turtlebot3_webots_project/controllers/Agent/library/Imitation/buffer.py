@@ -7,7 +7,7 @@ class SerializedBuffer:
 
     def __init__(self, path, device):
         tmp = torch.load(path)
-        self.buffer_size = self._n = tmp['state'].size(0)
+        # self.buffer_size = self._n = tmp['state'].size(0)
         self.device = device
 
         self.states = tmp['state'].clone().to(self.device)
@@ -77,8 +77,11 @@ class Buffer(SerializedBuffer):
         self.states = data['state'].clone().to(self.device)
         self.actions = data['action'].clone().to(self.device)
         self.rewards = data['reward'].clone().to(self.device)
-        self.dones = data['done'].clone().to(self.device)
+        self.dones = data['dones'].clone().to(self.device)
         self.next_states = data['next_state'].clone().to(self.device)
+
+        self._p = 0
+        self._n = torch.prod(torch.as_tensor(data['dones'].shape))
 
 class RolloutBuffer():
     def __init__(self,
@@ -139,10 +142,29 @@ class RolloutBuffer():
             self.rewards[idxes],
         )
 
+    def set(self,
+            obs,
+            next_obs,
+            actions,
+            logprobs,
+            values,
+            next_terminations,
+            next_dones,
+            rewards):
+        assert self.idx % self.max_buffer == 0
+        self.obs = obs
+        self.next_obs = next_obs
+        self.actions = actions
+        self.logprobs = logprobs
+        self.values = values
+        self.next_terminations = next_terminations
+        self.next_dones = next_dones
+        self.rewards = rewards
+
     def sample(self, batch_size):
         # avoid on array not being filled until max size
         assert self.idx % self.max_buffer == 0
-        idxes = np.random.randint(low=0, high=self._n, size=batch_size)
+        idxes = np.random.randint(low=0, high=self.min_idx, size=batch_size)
         return (
             self.obs[idxes],
             self.next_obs[idxes],

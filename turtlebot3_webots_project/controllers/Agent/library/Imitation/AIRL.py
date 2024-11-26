@@ -1,21 +1,21 @@
+import os
+import time
+from types import SimpleNamespace
+from typing import Optional, Type, Union
+
+import gymnasium as gym
+
+import hydra
 import numpy as np
 import torch as th
 import torch.nn as nn
-from torch.optim.adam import Adam
 import torch.nn.functional as F
-
-import os
-
-from typing import Union, Type, Optional
-from types import SimpleNamespace
-
-import hydra
 from hydra.utils import instantiate
 from omegaconf import OmegaConf
-
+from torch.optim.adam import Adam
 from torch.utils.tensorboard.writer import SummaryWriter
 
-from ..custom_rl_algo import Logger, PPO
+from ..custom_rl_algo import PPO, Logger
 
 
 def disable_gradient(network: nn.Module,
@@ -50,8 +50,7 @@ class AIRLDiscriminator(nn.Module):
         hidden activation of the discriminator v
     """
     def __init__(self,
-                 state_shape,
-                 action_shape :         Optional[int],
+                 env : gym.Env,
                  use_action :           bool                = False,
                  gamma :                float                 = 0.99,
 
@@ -64,6 +63,11 @@ class AIRLDiscriminator(nn.Module):
 
         #####################################################################################
         super(AIRLDiscriminator, self).__init__()
+        self.env = env
+        state_shape = np.prod(self.env.single_observation_space.shape)
+        action_shape = np.prod(self.env.single_action_space.shape)
+        print(f"{state_shape=}")
+        print(f"{action_shape=}")
         g_net = nn.ModuleList()
         g_net.append(nn.Linear(state_shape+action_shape if use_action else state_shape, 
                                hidden_units_r[0] if isinstance(hidden_units_r, tuple) else hidden_units_r))
@@ -120,6 +124,7 @@ class AIRLDiscriminator(nn.Module):
         rs = self.g_net(states)
         vs = self.h_net(states)
         next_vs = self.h_net(next_states)
+
         return rs + self.gamma * (1 - dones) * next_vs - vs
 
     def forward(
@@ -168,7 +173,7 @@ class AIRLDiscriminator(nn.Module):
             dones: th.Tensor,
             log_pis: th.Tensor,
             next_states: th.Tensor,
-            reward_type: str = 'base',
+            reward_type: str = 'airl_base',
     ) -> th.Tensor:
         r"""
         Calculate reward using AIRL's reward function
@@ -267,7 +272,8 @@ class AIRL():
     def __init__(self,
                  env, 
                  config_path: str,
-                 config_name: str):
+                 config_name: str,
+                 expert_path: str):
 
         self.logger = Logger()
         self.env = env
@@ -303,8 +309,7 @@ class AIRL():
         print(f"{tuple(self.irl_params.units_disc_v[0])=}")
         # Discriminator.
         self.disc = AIRLDiscriminator(
-            state_shape=self.env.single_observation_space.shape[0],
-            action_shape=self.env.single_action_space.shape[0],
+            env=self.env,
             gamma=self.irl_params.gamma,
             hidden_units_r=tuple(self.irl_params.units_disc_r[0]),
             hidden_units_v=tuple(self.irl_params.units_disc_v[0]),
@@ -318,8 +323,20 @@ class AIRL():
         self.batch_size = self.irl_params.batch_size
         self.epoch_disc = self.irl_params.epoch_disc
 
+        self.writer = SummaryWriter(f"runs/{self.irl_params.exp_name}")
+        self.writer.add_text(                
+            "irl_hyperparameters",
+            "|param|value|\n|-|-|\n%s" % (
+                    "\n".join([f"|{key}|{value}|" for key, value in vars(self.irl_params).items()])),
+            )
+
+        self.scenario_idx_now = 0
+        self.expert_path = expert_path
+        self.load_buffer_data(self.expert_path+f"/trajectory_id_{self.scenario_idx_now}.pth")
+
     def load_buffer_data(self, path):
         self.buffer_exp.load(path)
+        print(f"expert data: {path} loaded!")
 
     def hydra_params_read(self,
                           config_path: str,
@@ -333,6 +350,7 @@ class AIRL():
                               version_base="1.2"):
             cfg = hydra.compose(config_name=config_name)
         dict_cfg = OmegaConf.to_object(cfg)
+        print(f"{dict_cfg=}")
 
         #re-formatted dict
         rl_new_cfg = {}
@@ -360,69 +378,151 @@ class AIRL():
     def train(self, 
               num_steps: int = 1e6):
         
-        for step in range(1, num_steps + 1):
+        self.n_steps = 0
+        while self.n_steps<num_steps:
+            #change scenario expert if rollout environment changed
+            #using environment on rl algo == PPO because env rl_algo using for rollout
+            if(self.env == self.env.unwrapped):
+                if self.scenario_idx_now != self.rl_algo.env.envs[0].scenario_idx:
+                    self.scenario_idx_now = self.rl_algo.env.envs[0].scenario_idx
+                    self.load_buffer_data(self.expert_path+f"/trajectory_id_{self.scenario_idx_now}.pth")
+            else:
+                if self.scenario_idx_now != self.rl_algo.env.envs[0].unwrapped.scenario_idx:
+                    self.scenario_idx_now = self.rl_algo.env.envs[0].unwrapped.scenario_idx
+                    self.load_buffer_data(self.expert_path+f"/trajectory_id_{self.scenario_idx_now}.pth")
+
+            # doing rollout trajectory from current policy
+            if (self.n_steps == 0):
+                # TRY NOT TO MODIFY: start the game
+                self.rl_algo.global_step = 0
+                self.rl_algo.start_time = time.time()
+                next_ob, _ = self.env.reset(seed=self.irl_params.seed)
+                next_ob = th.Tensor(next_ob).to(self.device)
+                self.rl_algo.temp_next_ob = next_ob
+                self.rl_algo.do_rollout(start_obs=next_ob)
+            else:
+                self.rl_algo.do_rollout()
+
+            self.n_steps += self.rl_params.num_steps
 
             for _ in range(self.irl_params.epoch_disc):
                 self.learning_steps_disc += 1
 
-                # doing rollout trajectory from current policy
-                self.rl_algo.do_rollout()
-
                 # Samples from current policy's trajectories.
-                states, _, _, dones, log_pis, next_states = \
-                    self.rl_algo.rl_buffer.sample(self.batch_size)
+                obs, next_obs, _, logprobs, _, _, dones, _ = \
+                    self.rl_algo.buffer.sample(int(self.irl_params.batch_size))
+                obs = obs.reshape((-1,) + self.env.single_observation_space.shape)
+                next_obs = next_obs.reshape((-1,) + self.env.single_observation_space.shape)
+
+                # we modify in this part for robotic navigation reaching terminal state
+                # because terminal state on absorbing state mode while training using rl
+                # so terminal state when state[0:10] < thresh_collision and state[10]<thresh_goal
+                # done is applied after 
+                # print(f"{states.shape=}")
+                laser_min = th.min(obs[:,0:9], dim=1).values
+                dist_to_goal = obs[:,10]
+
+                if(self.env == self.env.unwrapped):
+                    dones = th.logical_or(laser_min<self.env.envs[0].agent_settings.collision_dist,
+                                          dist_to_goal<self.env.envs[0].agent_settings.goal_dist)
+                else:
+                    dones = th.logical_or(laser_min<self.env.envs[0].unwrapped.agent_settings.collision_dist,
+                                          dist_to_goal<self.env.envs[0].unwrapped.agent_settings.goal_dist)
+                dones = dones.unsqueeze(1).int()
+
                 # Samples from expert's demonstrations.
-                states_exp, actions_exp, _, dones_exp, next_states_exp = \
-                    self.buffer_exp.sample(self.batch_size)
+                obs_exp, actions_exp, _, dones_exp, next_obs_exp = \
+                    self.buffer_exp.sample(int(self.irl_params.batch_size))
+
+                dones_exp = dones_exp.unsqueeze(1).int()
+                
                 # Calculate log probabilities of expert actions.
                 with th.no_grad():
-                    _, log_pis_exp, _, _ = self.rl_algo.agent.get_action_and_value(states_exp, actions_exp)
-                    # log_pis_exp = self.actor.evaluate_log_pi(
-                    #     states_exp, actions_exp)
+                    _, logprobs_exp, _, _ = self.rl_algo.agent.get_action_and_value(obs_exp, actions_exp)
+
+                logprobs_exp = logprobs_exp.unsqueeze(1)
 
                 # Update discriminator.
                 self.update_disc(
-                    states, dones, log_pis, next_states, states_exp,
-                    dones_exp, log_pis_exp, next_states_exp, writer
+                    obs, dones, logprobs, next_obs, 
+                    obs_exp, dones_exp, logprobs_exp, next_obs_exp
                 )
 
             # We don't use reward signals here,
-            states, actions, _, dones, log_pis, next_states = self.buffer.get()
+            obs, next_obs, acts, logprobs, values, terminations, dones, rewards  = self.rl_algo.buffer.get()
+
+            new_obs = obs.reshape((-1,) + self.env.single_observation_space.shape)
+            new_next_obs = next_obs.reshape((-1,) + self.env.single_observation_space.shape)
+            new_logprobs = logprobs.reshape(-1)
+
+            # we modify in this part for robotic navigation reaching terminal state
+            # because terminal state on absorbing state mode while training using rl
+            # so terminal state when state[0:10] < thresh_collision and state[10]<thresh_goal
+            # done is applied after 
+            # print(f"{states.shape=}")
+            laser_min = th.min(new_obs[:,0:9], dim=1).values
+            dist_to_goal = new_obs[:,10]
+            if(self.env == self.env.unwrapped):
+                new_dones = th.logical_or(laser_min<self.env.envs[0].agent_settings.collision_dist,
+                                      dist_to_goal<self.env.envs[0].agent_settings.goal_dist)
+            else:
+                new_dones = th.logical_or(laser_min<self.env.envs[0].unwrapped.agent_settings.collision_dist,
+                                      dist_to_goal<self.env.envs[0].unwrapped.agent_settings.goal_dist)
+            new_dones = new_dones.unsqueeze(1).int()
 
             # Calculate rewards.
-            rewards = self.disc.calculate_reward(
-                states, dones, log_pis, next_states)
+            rewards = self.disc.calculate_reward(new_obs, 
+                                                 new_dones, 
+                                                 new_logprobs, 
+                                                 new_next_obs,
+                                                 reward_type="airl_shaped")
 
-            # Update PPO using estimated rewards.
-            self.update_ppo(
-                states, actions, rewards, dones, log_pis, next_states, writer)
+            print(f"estimate {rewards.shape=}")
+            self.rl_algo.buffer.set(obs, 
+                                    next_obs, 
+                                    acts, 
+                                    logprobs, 
+                                    values, 
+                                    terminations, 
+                                    dones,
+                                    rewards)
 
-    # def update_disc(self, states, dones, log_pis, next_states,
-    #                 states_exp, dones_exp, log_pis_exp,
-    #                 next_states_exp, writer):
-    #     # Output of discriminator is (-inf, inf), not [0, 1].
-    #     logits_pi = self.disc(states, dones, log_pis, next_states)
-    #     logits_exp = self.disc(
-    #         states_exp, dones_exp, log_pis_exp, next_states_exp)
+            # Update PPO using new estimated rewards.
+            batch_data = self.rl_algo.calculate_gae()
+            self.rl_algo.update_ppo(batch_data)
 
-    #     # Discriminator is to maximize E_{\pi} [log(1 - D)] + E_{exp} [log(D)].
-    #     loss_pi = -F.logsigmoid(-logits_pi).mean()
-    #     loss_exp = -F.logsigmoid(logits_exp).mean()
-    #     loss_disc = loss_pi + loss_exp
+    def update_disc(self, 
+                    obs: th.Tensor,
+                    dones: th.Tensor, 
+                    logprobs: th.Tensor, 
+                    next_obs: th.Tensor,
+                    obs_exp: th.Tensor, 
+                    dones_exp: th.Tensor, 
+                    logprobs_exp: th.Tensor, 
+                    next_obs_exp: th.Tensor):
 
-    #     self.optim_disc.zero_grad()
-    #     loss_disc.backward()
-    #     self.optim_disc.step()
+        # Output of discriminator is (-inf, inf), not [0, 1].
+        logits_pi = self.disc(obs, obs, logprobs, next_obs)
+        logits_exp = self.disc(obs_exp, dones_exp, logprobs_exp, next_obs_exp)
 
-    #     if self.learning_steps_disc % self.epoch_disc == 0:
-    #         writer.add_scalar(
-    #             'loss/disc', loss_disc.item(), self.learning_steps)
+        # Discriminator is to maximize E_{\pi} [log(1 - D)] + E_{exp} [log(D)].
+        loss_pi = -F.logsigmoid(-logits_pi).mean()
+        loss_exp = -F.logsigmoid(logits_exp).mean()
+        loss_disc = loss_pi + loss_exp
 
-    #         # Discriminator's accuracies.
-    #         with torch.no_grad():
-    #             acc_pi = (logits_pi < 0).float().mean().item()
-    #             acc_exp = (logits_exp > 0).float().mean().item()
-    #         writer.add_scalar('stats/acc_pi', acc_pi, self.learning_steps)
-    #         writer.add_scalar('stats/acc_exp', acc_exp, self.learning_steps)
+        self.optim_disc.zero_grad()
+        loss_disc.backward()
+        self.optim_disc.step()
+
+        if self.learning_steps_disc % self.irl_params.epoch_disc == 0:
+            self.writer.add_scalar(
+                'loss/disc', loss_disc.item(), self.n_steps)
+
+            # Discriminator's accuracies.
+            with th.no_grad():
+                acc_pi = (logits_pi < 0).float().mean().item()
+                acc_exp = (logits_exp > 0).float().mean().item()
+            self.writer.add_scalar('stats/acc_pi', acc_pi, self.n_steps)
+            self.writer.add_scalar('stats/acc_exp', acc_exp, self.n_steps)
 
 

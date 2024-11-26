@@ -1,25 +1,24 @@
 import os
 from types import SimpleNamespace
+
+import numpy as np
+from library.tb3_agent import logger
 from stable_baselines3.common.callbacks import BaseCallback
 
-from library.tb3_agent import logger
-
-import torch as th
-import numpy as np
 
 # progress adding evaluation at before saving the model
 class Eval_and_Save(BaseCallback):
-    def __init__(self, 
+    def __init__(self,
                  env,
                  eval_configuration):
         super(Eval_and_Save, self).__init__()
         self.env = env
         self.eval_cfg = SimpleNamespace(**{sub_key: SimpleNamespace(**sub_item) for sub_key, sub_item in eval_configuration.items()})
 
-        # for triggering save and eval model 
+        # for triggering save and eval model
         # this boolean function is to triggering after env done true
         self.trigger = False
-        
+
         #for independent reward tracking...
         self.reward_list = []
 
@@ -31,7 +30,7 @@ class Eval_and_Save(BaseCallback):
             os.makedirs(self.eval_cfg.save.path, exist_ok=True)
         if (self.eval_cfg.eval.save_result == True):
             os.makedirs(os.path.join(self.eval_cfg.save.path, "stat"), exist_ok=True)
-        
+
     def _on_step(self) -> bool:
         if(self.env.done!=True):
             self.reward_list.append(self.locals['rewards'][0])
@@ -39,7 +38,7 @@ class Eval_and_Save(BaseCallback):
             all_reward = np.sum(np.asarray([val*(self.env.agent_settings.gamma**j) for j, val in enumerate(self.reward_list)]))
             self.reward_list = []
             logger("info", "CB", f"Total Reward: {all_reward}")
-            
+
         if (self.n_calls % self.eval_cfg.every.timestep == 0 and self.eval_cfg.eval.enable==True):
             self.trigger = True
         if(self.env.done == True and self.trigger == True and self.eval_cfg.eval.enable==True):
@@ -47,22 +46,22 @@ class Eval_and_Save(BaseCallback):
 
             # set to eval mode so not tracing change scenario automatically
             self.env.eval = True
-            
+
             # saving last scene and last success counter
             self.last_scene_idx = self.env.scenario_idx
             self.last_success_counter = self.env.success_counter
-            
+
             #resetting success counter
             self.env.success_counter = 0
 
             #evaluate policy
-            n_success, ep_rew, ep_time_len = tb3_evaluate_policy(self.env, 
-                                                                 self.model, 
-                                                                 deterministic=True) 
-            
+            n_success, ep_rew, ep_time_len = tb3_evaluate_policy(self.env,
+                                                                 self.model,
+                                                                 deterministic=True)
+
             #saving statistic reward and time length
             stat = np.vstack([n_success, ep_rew, ep_time_len], dtype=object).T
-            os.path.join("./RL_model","stat/")+str("rl_ppo"+"_stat")+str(f"_step_0")
+            os.path.join("./RL_model","stat/")+str("rl_ppo"+"_stat")+str("_step_0")
             with open(os.path.join(self.eval_cfg.save.path,"stat/")+str(self.eval_cfg.save.name+"_stat")+str(f"_step_{self.n_calls}"), 'wb') as f:
                 np.save(f, stat)
 
@@ -76,27 +75,27 @@ class Eval_and_Save(BaseCallback):
                     self.model.save(os.path.join(self.eval_cfg.save.path, self.eval_cfg.save.name)+str(f"_step_{self.n_calls}"))
                 else:
                     self.model.save(os.path.join(self.eval_cfg.save.path, self.eval_cfg.save.name)+str(f"_step_{self.n_calls}")+"_failed")
-     
+
             # reload last scene and last success counter to env
-            self.env.scenario_idx = self.last_scene_idx 
+            self.env.scenario_idx = self.last_scene_idx
             self.env.success_counter = self.last_success_counter
-                
+
             # disable eval mode to change scenario automatically
             self.env.eval = False
-            
+
             #resetting the environment
             self.env.reset()
 
         return True
 
 # support only single environment
-def tb3_evaluate_policy(env, 
-                        model, 
+def tb3_evaluate_policy(env,
+                        model,
                         deterministic:bool=True):
     head_name = "Eval_Mode"
     logger("hidden", head_name, "evaluate model policy")
-    
-    #for counting 
+
+    #for counting
     n_success = np.zeros(shape=env.max_scenario, dtype=np.bool_)
     ep_reward = np.zeros(shape=env.max_scenario, dtype=np.float64)
     ep_time_length = np.zeros(shape=env.max_scenario, dtype=np.float64)
@@ -119,7 +118,7 @@ def tb3_evaluate_policy(env,
                                            state=states,
                                            episode_start=episode_starts,
                                            deterministic=deterministic)
-            
+
             new_observations, rewards, dones, trunc, infos = env.step(actions)
             reward_list.append(rewards)
             episode_starts[0] = dones
@@ -147,7 +146,7 @@ def tb3_evaluate_policy(env,
 
 
 # class AIRL_Standard_Callback(BaseCallback):
-#     def __init__(self, 
+#     def __init__(self,
 #                  env,
 #                  max_success_to_goal: int = 5):
 #         self.env = env
