@@ -55,3 +55,5 @@ turtlebot3_webots_project/controllers/Agent/Agent.bckp
 /turtlebot3_webots_project/controllers/Agent/models
 /turtlebot3_webots_project/controllers/Agent/models/RL_PPO_Gaussian
 /turtlebot3_webots_project/controllers/Agent/models/RL_PPO_Gaussian
+turtlebot3_webots_project/worlds/.Amazon_warehouse_world_0_375_fix.wbproj
+*.wbproj

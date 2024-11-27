@@ -3,6 +3,9 @@ name: airl
 #enable nvidia cuda processing
 cuda_en: 1
 
+# every n steps 2560 because rollout 2560 (so, 2560*50)
+save_every_nstep : 128000
+
 #buffer experience class
 buffer_exp: 
   _target_: library.Imitation.buffer.Buffer
@@ -19,7 +22,7 @@ disc_optimizer:
   lr: 3.0e-4
 
 #update period for discriminator 
-epoch_disc: 10
+epoch_disc: 5
 
 #batch size
 batch_size: 256

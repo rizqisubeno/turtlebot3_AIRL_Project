@@ -378,6 +378,7 @@ class AIRL():
     def train(self, 
               num_steps: int = 1e6):
         
+        iter = 0
         self.n_steps = 0
         while self.n_steps<num_steps:
             #change scenario expert if rollout environment changed
@@ -491,6 +492,13 @@ class AIRL():
             batch_data = self.rl_algo.calculate_gae()
             self.rl_algo.update_ppo(batch_data)
 
+            #save discriminator
+
+            if(self.n_steps % self.irl_params.save_every_nstep == 0):
+                self.save_models(save_dir="./models/airl",
+                                 iter=iter)
+                iter += 1
+
     def update_disc(self, 
                     obs: th.Tensor,
                     dones: th.Tensor, 
@@ -501,14 +509,30 @@ class AIRL():
                     logprobs_exp: th.Tensor, 
                     next_obs_exp: th.Tensor):
 
-        # Output of discriminator is (-inf, inf), not [0, 1].
-        logits_pi = self.disc(obs, obs, logprobs, next_obs)
-        logits_exp = self.disc(obs_exp, dones_exp, logprobs_exp, next_obs_exp)
+        # # Output of discriminator is (-inf, inf), not [0, 1].
+        # logits_pi = self.disc(obs, obs, logprobs, next_obs)
+        # logits_exp = self.disc(obs_exp, dones_exp, logprobs_exp, next_obs_exp)
 
-        # Discriminator is to maximize E_{\pi} [log(1 - D)] + E_{exp} [log(D)].
-        loss_pi = -F.logsigmoid(-logits_pi).mean()
-        loss_exp = -F.logsigmoid(logits_exp).mean()
-        loss_disc = loss_pi + loss_exp
+        # # Discriminator is to maximize E_{\pi} [log(1 - D)] + E_{exp} [log(D)].
+        # loss_pi = -F.logsigmoid(-logits_pi).mean()
+        # loss_exp = -F.logsigmoid(logits_exp).mean()
+        # loss_disc = loss_pi + loss_exp
+
+        # try to use imitation library loss using binary_cross_netropy_with_logits
+        obs = th.concatenate([obs, obs_exp])
+        dones = th.concatenate([dones, dones_exp])
+        log_probs = th.concatenate([logprobs, logprobs_exp])
+        next_obs = th.concatenate([next_obs, next_obs_exp])
+        logits = th.concatenate([th.ones(self.irl_params.batch_size, dtype=th.int),
+                                 th.zeros(self.irl_params.batch_size, dtype=th.int),
+                                ]).to(self.device)
+
+        disc_output = self.disc(obs,
+                                dones, 
+                                log_probs, 
+                                next_obs)
+
+        loss_disc = F.binary_cross_entropy_with_logits(disc_output.flatten(), logits.float())
 
         self.optim_disc.zero_grad()
         loss_disc.backward()
@@ -518,11 +542,30 @@ class AIRL():
             self.writer.add_scalar(
                 'loss/disc', loss_disc.item(), self.n_steps)
 
-            # Discriminator's accuracies.
-            with th.no_grad():
-                acc_pi = (logits_pi < 0).float().mean().item()
-                acc_exp = (logits_exp > 0).float().mean().item()
-            self.writer.add_scalar('stats/acc_pi', acc_pi, self.n_steps)
-            self.writer.add_scalar('stats/acc_exp', acc_exp, self.n_steps)
+            # # Discriminator's accuracies.
+            # with th.no_grad():
+            #     acc_pi = (logits_pi < 0).float().mean().item()
+            #     acc_exp = (logits_exp > 0).float().mean().item()
+            # self.writer.add_scalar('stats/acc_pi', acc_pi, self.n_steps)
+            # self.writer.add_scalar('stats/acc_exp', acc_exp, self.n_steps)
 
+    def save_models(self, 
+                    save_dir: str,
+                    iter: int):
+        """
+        Save the model
 
+        Parameters
+        ----------
+        save_dir: str
+            path to save
+        """
+        if not os.path.isdir(save_dir):
+            os.mkdir(save_dir)
+        # saving discriminator
+        th.save(self.disc.state_dict(), f'{save_dir}/disc_{iter}.pkl')
+
+        # saving actor policy
+        self.rl_algo.agent.save_model(f'{save_dir}',
+                                      "actor",
+                                      iter)
