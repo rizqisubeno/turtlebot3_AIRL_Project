@@ -7,6 +7,9 @@ import numpy as np
 from imitation.data import types
 from library.tb3_agent import Agent, logger
 
+# from scenario list
+from scenario_list import list_robot_scenario
+
 
 class JoystickEnv(Agent):
     """
@@ -89,10 +92,10 @@ class JoystickEnv(Agent):
 
         if self.en_tracking:
             self.tracking.states.append(
-                state.tolist() if type(state) == np.ndarray else state
+                state.tolist() if isinstance(action, np.ndarray) else state
             )
             self.tracking.actions.append(
-                action.tolist() if type(action) == np.ndarray else action
+                action.tolist() if isinstance(action, np.ndarray) else action
             )
             self.tracking.infos.append(info)
 
@@ -158,3 +161,64 @@ class JoystickEnv(Agent):
             )
 
         return state, info
+
+
+class TB3_Agent_Demo(Agent):
+    def __init__(self,
+                 name_exp,
+                 agent_settings,
+                 scene_configuration,
+                 fixed_steps: bool = True,
+                 logging_reward: bool = False,
+                 verbose: bool = False):
+        super(TB3_Agent_Demo, self).__init__(name_exp, 
+                                             agent_settings, 
+                                             scene_configuration, 
+                                             fixed_steps, 
+                                             verbose)
+        
+        self.scenario_now_idx = self.scene_cfg.scene_start_from
+        self.spawn_and_change_hidden_ball(self.scene_cfg.scene_start_from)
+
+    def spawn_and_change_hidden_ball(self, 
+                                     scenario_idx):
+        self.root_node = self.agent.getRoot()
+        self.children_field = self.root_node.getField('children')        
+        
+        j = 0
+        for i in range(self.max_scenario):
+            if i==scenario_idx:
+                pass
+            else:
+                print("spawn hidden target index : ", i)
+                x = list_robot_scenario[i][4]
+                y = list_robot_scenario[i][5]
+                z = list_robot_scenario[i][6]
+                self.children_field.importMFNodeFromString(-1, 
+                                                           f"DEF hidden{j} hidden_target_ball {{ translation {x} {y} {z} }}")
+                j+=1
+
+    def delete_hidden_ball(self,
+                           scenario_idx):
+        j = 0
+        for i in range(self.max_scenario):
+            if i==scenario_idx:
+                pass
+            else:
+                print("delete hidden target index : ", i)
+                hidden_node = self.agent.getFromDef(f'hidden{j}')
+                hidden_node.remove()
+                j+=1
+
+    def step(self, action):
+        return super(TB3_Agent_Demo, self).step(action)
+
+    def reset(self, seed: Optional[int] = 1):
+        obs, info = super(TB3_Agent_Demo, self).reset(seed)
+        if self.scenario_now_idx != self.scenario_idx:
+            self.scenario_now_idx = self.scenario_idx
+            self.delete_hidden_ball(self.scenario_now_idx)
+            self.spawn_and_change_hidden_ball(self.scenario_now_idx)
+
+        return obs, info
+

@@ -22,7 +22,7 @@ from library.custom_rl_algo import PPO, SAC
 from library.Imitation.AIRL import AIRL
 from library.tb3_agent import Agent, logger
 from library.tb3_agent_callback import Eval_and_Save
-from library.tb3_agent_wrapper import JoystickEnv
+from library.tb3_agent_wrapper import JoystickEnv, TB3_Agent_Demo
 from numpy.typing import NDArray
 
 # RL Library
@@ -373,12 +373,11 @@ def CustomAIRLProgram(exp_name: str):
 
     roboAgent = gym.vector.SyncVectorEnv(
         [
-            lambda: Agent(
-                name_exp=exp_name,
-                agent_settings=agent_settings,
-                scene_configuration=scene_configuration,
-                fixed_steps=True,
-                logging_reward=True,
+            lambda: TB3_Agent_Demo(name_exp=exp_name,
+                                   agent_settings=agent_settings,
+                                   scene_configuration=scene_configuration,
+                                   fixed_steps=True,
+                                   logging_reward=True,
             )
         ]
     )

@@ -8,6 +8,7 @@ EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/project
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/objects/panels/protos/Panel.proto"
 EXTERNPROTO "https://raw.githubusercontent.com/cyberbotics/webots/R2023b/projects/appearances/protos/RoughPolymer.proto"
 EXTERNPROTO "../protos/RobotisLds01.proto"
+IMPORTABLE EXTERNPROTO "../protos/hidden_target_ball.proto"
 
 DEF WorldInfo WorldInfo {
   title "Amazon_Warehouse"
