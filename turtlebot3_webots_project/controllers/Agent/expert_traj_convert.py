@@ -33,10 +33,14 @@ for file_name in os.listdir(folder_path):
         print(f"Loaded {file_name} into traj_{suffix} with size {num_ep} episode and max {num_steps_on_ep} steps")
 
         ## Patch for error on the code
-        if num_steps_on_ep[0] + 1 != data[0]['obs'].shape[0]:
-            print(f"fix the error on {file_name}")
-            for i in range(len(data)):
+        for i in range(len(data)):
+            if num_steps_on_ep[0] + 1 < data[i]['obs'].shape[0]:
+                print(f"fix the error on idx:{i}")
                 data[i]['obs'] = data[i]['obs'][1:]
+
+        for i in range(len(data)):
+            if data[i]['obs'].shape[0] != num_steps_on_ep[0]+1:
+                raise IndexError(f"stop on i:{i} : {data[i]['obs'].shape[0]} != {num_steps_on_ep[0]+1}")
 
         # convert to torch array
         traj_list = []
@@ -126,7 +130,6 @@ for file_name in os.listdir(folder_path):
 
             traj_list.append([traj, {'rank':rank_idx}])
         # traj_list = th.as_tensor(data=np.array(traj_list), dtype=th.float32)
-
 
         # print(f"{traj_list[0][0]['action']=}")
         # print(f"{traj_list[0][1]['rank']=}")
