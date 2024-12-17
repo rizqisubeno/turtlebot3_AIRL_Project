@@ -119,14 +119,11 @@ class ModifiedBuffer():
             self.next_states[i_traj] = data[i_traj][0]['next_state'].clone().to(self.device)
 
             self.rank[i_traj] = torch.Tensor([data[i_traj][1]['rank']]).to(self.device)
-        # print(f"{self.actions[0].shape}")
 
+    # customize in this function
     def sample(self, batch_size):
         id_ep = np.random.choice(self.num_ep, 1, p=self.rank.reshape(-1).cpu().numpy()).item()
-        # idxes = np.random.randint(low=0, high=self.num_ep_traj, size=batch_size)
         idxes = torch.randint(low=0, high=self.num_ep_traj, size=(batch_size,))
-        # print(f"{id_ep=}")
-        # print(f"{idxes=}")
         return (
             self.states[id_ep][idxes],
             self.actions[id_ep][idxes],
