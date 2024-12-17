@@ -23,7 +23,7 @@ disc_optimizer:
   lr: 3.0e-4
 
 #update period for discriminator 
-epoch_disc: 5
+epoch_disc: 8
 
 #batch size
 batch_size: 256

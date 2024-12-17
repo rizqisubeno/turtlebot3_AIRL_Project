@@ -57,7 +57,7 @@ clip_coef: 0.2
 clip_vloss: False
 
 #Entropy Coefficient 
-ent_coef: 0.005
+ent_coef: 0.001
 
 #Value coefficient for update policy
 vf_coef: 0.5
