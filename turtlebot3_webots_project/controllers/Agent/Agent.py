@@ -53,7 +53,7 @@ def create_demonstration():
 
     scene_configuration = {
         "change_scene_every_goal_reach": 50,  # change the scenario every n goal reach
-        "scene_start_from": 1,  # scene start from n
+        "scene_start_from": 4,  # scene start from n
         "random_start": False,  # whether start from x and y coordinate random or not
         "max_steps": 1280,
     }
@@ -90,56 +90,58 @@ def create_demonstration():
     filter, z_out_1, z_out_2 = init_filter()
     # print(f"{z_out_1}")
     # print(f"{z_out_2}")
-
     state, info = roboJoystick.reset(seed=15)
-    while not roboJoystick.demo_stop:
-        # on windows with this setup
-        if roboJoystick.joyController.model == "Android Gamepad":
-            forward = -roboJoystick.joyController.getAxisValue(
-                3
-            )  # joystick analog on right (default 2)
-            turn = roboJoystick.joyController.getAxisValue(
-                0
-            )  # joystick analog on left (default 1)
+    while not roboJoystick.scenario_reach_end:
+        roboJoystick.demo_stop = False
+        # state, info = roboJoystick.reset(seed=15)
+        while not roboJoystick.demo_stop:
+            # on windows with this setup
+            if roboJoystick.joyController.model == "Android Gamepad":
+                forward = -roboJoystick.joyController.getAxisValue(
+                    3
+                )  # joystick analog on right (default 2)
+                turn = roboJoystick.joyController.getAxisValue(
+                    0
+                )  # joystick analog on left (default 1)
 
-        if forward < 0:
-            forward = 0
+            if forward < 0:
+                forward = 0
 
-        # check based distance
-        if state[-2] <= agent_settings["goal_dist"]:
-            roboJoystick.agent.simulationSetMode(2)
-            forward = 0  # force to lowing linear vel
-            turn = 0  # force to center of turn
+            # check based distance
+            if state[-2] <= agent_settings["goal_dist"]:
+                roboJoystick.agent.simulationSetMode(2)
+                forward = 0  # force to lowing linear vel
+                turn = 0  # force to center of turn
 
-        # print(forward)
-        out_0 = scale_value(forward, 0, 32767, -1, 1)
-        out_0 = np.clip(out_0, a_min=-1.000, a_max=1.000)
+            # print(forward)
+            out_0 = scale_value(forward, 0, 32767, -1, 1)
+            out_0 = np.clip(out_0, a_min=-1.000, a_max=1.000)
 
-        out_1 = scale_value(turn, -32767, 32767, -1, 1)
-        out_1 = np.clip(out_1, a_min=-1.000, a_max=1.000)
+            out_1 = scale_value(turn, -32767, 32767, -1, 1)
+            out_1 = np.clip(out_1, a_min=-1.000, a_max=1.000)
 
-        out_0_filt, z_out_1 = signal.lfilter(filter, 1, [out_0], zi=z_out_1)
-        out_1_filt, z_out_2 = signal.lfilter(filter, 1, [out_1], zi=z_out_2)
+            out_0_filt, z_out_1 = signal.lfilter(filter, 1, [out_0], zi=z_out_1)
+            out_1_filt, z_out_2 = signal.lfilter(filter, 1, [out_1], zi=z_out_2)
 
-        out_0_filt = np.clip(out_0_filt, a_min=-1.000, a_max=1.000)
-        out_1_filt = np.clip(out_1_filt, a_min=-1.000, a_max=1.000)
+            out_0_filt = np.clip(out_0_filt, a_min=-1.000, a_max=1.000)
+            out_1_filt = np.clip(out_1_filt, a_min=-1.000, a_max=1.000)
 
-        z_out_1 = np.clip(z_out_1, a_min=-1.000, a_max=1.000)
-        z_out_2 = np.clip(z_out_2, a_min=-1.000, a_max=1.000)
-        # print(out_0_filt, out_1_filt)
+            z_out_1 = np.clip(z_out_1, a_min=-1.000, a_max=1.000)
+            z_out_2 = np.clip(z_out_2, a_min=-1.000, a_max=1.000)
+            # print(out_0_filt, out_1_filt)
 
-        next_state, reward, done, trunc, info = roboJoystick.step(
-            [out_0_filt[0], out_1_filt[0]]
-        )
+            next_state, reward, done, trunc, info = roboJoystick.step(
+                [out_0_filt[0], out_1_filt[0]]
+            )
 
-        state = next_state
+            state = next_state
 
-        if roboJoystick.idx + 1 > scene_configuration["max_steps"]:
-            # print("wes rampung gan...")
-            roboJoystick.agent.simulationSetMode(1)
-            state, info = roboJoystick.reset(seed=15)
-            filter, z_out_1, z_out_2 = init_filter()
-    logger("info", "Py", "end create demonstration")
+            if roboJoystick.idx + 1 > scene_configuration["max_steps"]:
+                # print("fast mode simulation until end steps!...")
+                roboJoystick.agent.simulationSetMode(1)
+                state, info = roboJoystick.reset(seed=15)
+                filter, z_out_1, z_out_2 = init_filter()
+        logger("info", "Py", f"end create demonstration for scenario:{roboJoystick.scenario_idx}")
 
 
 def create_mapping_ros2():
@@ -373,7 +375,7 @@ def CustomAIRLProgram(exp_name: str):
 
     roboAgent = gym.vector.SyncVectorEnv(
         [
-            lambda: TB3_Agent_Demo(name_exp=exp_name,
+            lambda: Agent(name_exp=exp_name,
                                    agent_settings=agent_settings,
                                    scene_configuration=scene_configuration,
                                    fixed_steps=True,

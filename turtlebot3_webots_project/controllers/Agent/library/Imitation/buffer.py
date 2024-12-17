@@ -83,6 +83,59 @@ class Buffer(SerializedBuffer):
         self._p = 0
         self._n = torch.prod(torch.as_tensor(data['dones'].shape))
 
+class ModifiedBuffer():
+    def __init__(self, device):
+        self.device = device
+
+    def load(self, path):
+        data = torch.load(path, 
+                          weights_only=False)
+        self.num_ep = len(data)
+        self.num_ep_traj = len(data[0][0]['action'])
+        state_shape = data[0][0]['state'][0].shape
+        action_shape = data[0][0]['action'][0].shape
+        next_state_shape = data[0][0]['next_state'][0].shape
+
+        self.states = torch.empty(
+            (self.num_ep, self.num_ep_traj, *state_shape), dtype=torch.float, device=self.device)
+        self.actions = torch.empty(
+            (self.num_ep, self.num_ep_traj, *action_shape), dtype=torch.float, device=self.device)
+        self.rewards = torch.empty(
+            (self.num_ep, self.num_ep_traj, 1), dtype=torch.float, device=self.device)
+        # print(f"{self.rewards.shape=}")
+        self.dones = torch.empty(
+            (self.num_ep, self.num_ep_traj, 1), dtype=torch.float, device=self.device)
+        self.next_states = torch.empty(
+            (self.num_ep, self.num_ep_traj, *next_state_shape), dtype=torch.float, device=self.device)
+        self.rank = torch.empty(
+            (self.num_ep, 1), dtype=torch.float, device=self.device)
+        
+        for i_traj in range(len(data)):
+            self.states[i_traj] = data[i_traj][0]['state'].clone().to(self.device)
+            self.actions[i_traj] = data[i_traj][0]['action'].clone().to(self.device)
+            # print(f"{self.rewards[i_traj].shape=}")
+            self.rewards[i_traj] = data[i_traj][0]['reward'].clone().to(self.device)
+            self.dones[i_traj] = data[i_traj][0]['dones'].clone().to(self.device)
+            self.next_states[i_traj] = data[i_traj][0]['next_state'].clone().to(self.device)
+
+            self.rank[i_traj] = torch.Tensor([data[i_traj][1]['rank']]).to(self.device)
+        # print(f"{self.actions[0].shape}")
+
+    def sample(self, batch_size):
+        id_ep = np.random.choice(self.num_ep, 1, p=self.rank.reshape(-1).cpu().numpy()).item()
+        # idxes = np.random.randint(low=0, high=self.num_ep_traj, size=batch_size)
+        idxes = torch.randint(low=0, high=self.num_ep_traj, size=(batch_size,))
+        # print(f"{id_ep=}")
+        # print(f"{idxes=}")
+        return (
+            self.states[id_ep][idxes],
+            self.actions[id_ep][idxes],
+            self.rewards[id_ep][idxes],
+            self.dones[id_ep][idxes],
+            self.next_states[id_ep][idxes]
+        )
+
+
 class RolloutBuffer():
     def __init__(self,
                  buffer_size,

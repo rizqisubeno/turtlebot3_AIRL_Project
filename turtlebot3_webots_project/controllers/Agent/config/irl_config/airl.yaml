@@ -8,7 +8,8 @@ save_every_nstep : 128000
 
 #buffer experience class
 buffer_exp: 
-  _target_: library.Imitation.buffer.Buffer
+#  _target_: library.Imitation.buffer.Buffer
+  _target_: library.Imitation.buffer.ModifiedBuffer
 
 #random seed number
 seed: 1

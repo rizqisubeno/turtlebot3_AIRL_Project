@@ -66,8 +66,8 @@ class AIRLDiscriminator(nn.Module):
         self.env = env
         state_shape = np.prod(self.env.single_observation_space.shape)
         action_shape = np.prod(self.env.single_action_space.shape)
-        print(f"{state_shape=}")
-        print(f"{action_shape=}")
+        # print(f"{state_shape=}")
+        # print(f"{action_shape=}")
         g_net = nn.ModuleList()
         g_net.append(nn.Linear(state_shape+action_shape if use_action else state_shape, 
                                hidden_units_r[0] if isinstance(hidden_units_r, tuple) else hidden_units_r))
@@ -203,7 +203,12 @@ class AIRLDiscriminator(nn.Module):
                 logits = self.forward(states, dones, log_pis, next_states)
             return -F.logsigmoid(-logits)
         elif ("airl_shaped" in reward_type):
-            return self.f(states, dones, next_states)
+            # return self.f(states, dones, next_states)
+            # print(f"{states.shape=}")
+            # print(f"{dones.shape=}")
+            # print(f"{log_pis.shape=}")
+            # print(f"{next_states.shape=}")
+            return self.forward(states, dones, log_pis, next_states)
         elif ("airl_base" in reward_type):
             return self.g_net(states)
         else:
@@ -297,12 +302,17 @@ class AIRL():
         assert abs(float(self.rl_params.gamma)-float(self.irl_params.gamma))<=1e-5
 
         # Expert's buffer.
+        # self.buffer_exp = instantiate(self.irl_params.buffer_exp,
+        #                               buffer_size=self.irl_params.batch_size,   #actually is larger than batch_size only for init
+        #                               state_shape=self.env.single_observation_space.shape,
+        #                               action_shape=self.env.single_action_space.shape,
+        #                               device=self.device
+        #                             )
+
+        #try using modifiedBuffer
         self.buffer_exp = instantiate(self.irl_params.buffer_exp,
-                                      buffer_size=self.irl_params.batch_size,
-                                      state_shape=self.env.single_observation_space.shape,
-                                      action_shape=self.env.single_action_space.shape,
-                                      device=self.device
-                                    )
+                                      device=self.device)
+
         print(self.buffer_exp)
 
         print(f"{tuple(self.irl_params.units_disc_r[0])=}")
@@ -435,7 +445,8 @@ class AIRL():
                 obs_exp, actions_exp, _, dones_exp, next_obs_exp = \
                     self.buffer_exp.sample(int(self.irl_params.batch_size))
 
-                dones_exp = dones_exp.unsqueeze(1).int()
+                # dones_exp = dones_exp.unsqueeze(1).int()
+                dones_exp = dones_exp.int()
                 
                 # Calculate log probabilities of expert actions.
                 with th.no_grad():
@@ -454,7 +465,8 @@ class AIRL():
 
             new_obs = obs.reshape((-1,) + self.env.single_observation_space.shape)
             new_next_obs = next_obs.reshape((-1,) + self.env.single_observation_space.shape)
-            new_logprobs = logprobs.reshape(-1)
+            # new_logprobs = logprobs.reshape(-1)
+            new_logprobs = logprobs
 
             # we modify in this part for robotic navigation reaching terminal state
             # because terminal state on absorbing state mode while training using rl
@@ -520,11 +532,12 @@ class AIRL():
 
         # try to use imitation library loss using binary_cross_netropy_with_logits
         obs = th.concatenate([obs, obs_exp])
+
         dones = th.concatenate([dones, dones_exp])
         log_probs = th.concatenate([logprobs, logprobs_exp])
         next_obs = th.concatenate([next_obs, next_obs_exp])
-        logits = th.concatenate([th.ones(self.irl_params.batch_size, dtype=th.int),
-                                 th.zeros(self.irl_params.batch_size, dtype=th.int),
+        logits = th.concatenate([th.zeros(self.irl_params.batch_size, dtype=th.int),
+                                 th.ones(self.irl_params.batch_size, dtype=th.int),
                                 ]).to(self.device)
 
         disc_output = self.disc(obs,

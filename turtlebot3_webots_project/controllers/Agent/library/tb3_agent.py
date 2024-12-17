@@ -124,6 +124,7 @@ class Agent(gym.Env):
         self.step_idx = 0
         self.idx = 0  # idx counter until maxsteps then reset
         self.scenario_idx = self.scene_cfg.scene_start_from
+        self.scenario_reach_end = False
         self.max_scenario = max_robot_scenario
         self.success_counter = 0
         self.done = False
@@ -411,6 +412,7 @@ class Agent(gym.Env):
             self.scenario_idx += 1
             if self.scenario_idx >= max_robot_scenario:
                 self.scenario_idx = 0
+                self.scenario_reach_end = True
         start_msg = start_agent_msg()
         start_msg.idx = self.start_idx
         start_msg.agent_state = "r"
