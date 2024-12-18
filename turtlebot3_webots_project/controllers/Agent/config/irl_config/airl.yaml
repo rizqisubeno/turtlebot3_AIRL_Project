@@ -12,7 +12,7 @@ buffer_exp:
   _target_: library.Imitation.buffer.ModifiedBuffer
 
 #random seed number
-seed: 1
+seed: 15
 
 #discount factor (gamma)
 gamma: 0.995
@@ -23,16 +23,16 @@ disc_optimizer:
   lr: 3.0e-4
 
 #update period for discriminator 
-epoch_disc: 8
+epoch_disc: 6
 
 #batch size
 batch_size: 256
 
 units_disc_r:
-- [100, 100]
+- [128, 128]
 
 units_disc_v:
-- [100, 100]
+- [128, 128]
 
 
 
