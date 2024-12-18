@@ -56,9 +56,11 @@ class AIRLDiscriminator(nn.Module):
 
                  hidden_units_r :       Union[tuple, int]   = (64, 64),
                  hidden_units_v :       Union[tuple, int]   = (64, 64),
+                 hidden_units_g :       Union[tuple, int]   = (64, 64),
  
                  hidden_activation_r :  nn.Module           = nn.ReLU(),
                  hidden_activation_v :  nn.Module           = nn.ReLU(),
+                 hidden_activation_g :  nn.Module           = nn.ReLU(),
                  ):
 
         #####################################################################################
@@ -99,6 +101,27 @@ class AIRLDiscriminator(nn.Module):
                 
         self.h_net = nn.Sequential(*h_net)
 
+        #####################################################################################
+        goal_net = nn.ModuleList()
+        goal_net.append(nn.Linear(state_shape, 
+                                  hidden_units_g[0] if isinstance(hidden_units_g, tuple) else hidden_units_g))
+        
+        if(isinstance(hidden_units_g, tuple)):
+            if(len(hidden_units_g)>1):
+                goal_net.append(hidden_activation_g)
+            for i in range(0,len(hidden_units_g)):
+                goal_net.append(nn.Linear(hidden_units_g[i], 
+                                       hidden_units_g[i+1] if i!=len(hidden_units_g)-1 else 3))
+                if(i!=len(hidden_units_g)-1):
+                    goal_net.append(hidden_activation_g)
+        
+        goal_net.append(nn.Softmax(dim=1))
+        self.goal_net = nn.Sequential(*goal_net)
+        score_collision = -1
+        score_goal = 1
+        score_while_reaching = 0
+        self.label_mapping = lambda x: th.where(x == 0, score_while_reaching, th.where(x == 1, score_collision, score_goal))
+
         self.gamma = gamma
 
     def f(self, 
@@ -125,7 +148,19 @@ class AIRLDiscriminator(nn.Module):
         vs = self.h_net(states)
         next_vs = self.h_net(next_states)
 
-        return rs + self.gamma * (1 - dones) * next_vs - vs
+        goal_rew = self.label_mapping(self.goal_f(next_states,
+                                                    no_grad=True).argmax(dim=1).type(th.int8)).unsqueeze(1)
+        # print(f"{next_states=}")
+        # print(f"{goal_rew=}")
+        return rs + self.gamma * (1 - dones) * next_vs - vs + goal_rew
+
+    def goal_f(self,
+               states: th.Tensor,
+               no_grad:bool=False) -> th.Tensor:
+        if no_grad==True:
+            with th.no_grad():
+                return self.goal_net(states)
+        return self.goal_net(states)
 
     def forward(
             self,
@@ -174,6 +209,7 @@ class AIRLDiscriminator(nn.Module):
             log_pis: th.Tensor,
             next_states: th.Tensor,
             reward_type: str = 'airl_base',
+            no_grad: bool = False
     ) -> th.Tensor:
         r"""
         Calculate reward using AIRL's reward function
@@ -208,6 +244,9 @@ class AIRLDiscriminator(nn.Module):
             # print(f"{dones.shape=}")
             # print(f"{log_pis.shape=}")
             # print(f"{next_states.shape=}")
+            if(no_grad==True):
+                with th.no_grad():
+                    return self.forward(states, dones, log_pis, next_states)
             return self.forward(states, dones, log_pis, next_states)
         elif ("airl_base" in reward_type):
             return self.g_net(states)
@@ -323,13 +362,17 @@ class AIRL():
             gamma=self.irl_params.gamma,
             hidden_units_r=tuple(self.irl_params.units_disc_r[0]),
             hidden_units_v=tuple(self.irl_params.units_disc_v[0]),
+            hidden_units_g=tuple(self.irl_params.units_disc_g[0]),
             hidden_activation_r=nn.ReLU(inplace=True),
-            hidden_activation_v=nn.ReLU(inplace=True)
+            hidden_activation_v=nn.ReLU(inplace=True),
+            hidden_activation_g=nn.ReLU(inplace=True),
         ).to(self.device)
 
         self.learning_steps_disc = 0
         self.optim_disc = instantiate(self.irl_params.disc_optimizer, 
-                                      params=self.disc.parameters())
+                                      params=list(self.disc.g_net.parameters())+list(self.disc.h_net.parameters()))
+        self.optim_goal_net = instantiate(self.irl_params.goal_net_optimizer, 
+                                      params=self.disc.goal_net.parameters())
         self.batch_size = self.irl_params.batch_size
         self.epoch_disc = self.irl_params.epoch_disc
 
@@ -492,8 +535,8 @@ class AIRL():
                                                  new_dones, 
                                                  new_logprobs, 
                                                  new_next_obs,
-                                                 reward_type="airl_shaped")
-
+                                                 reward_type="airl_shaped",
+                                                 no_grad=True)
             print(f"estimate {rewards.shape=}")
             self.rl_algo.buffer.set(obs, 
                                     next_obs, 
@@ -551,26 +594,53 @@ class AIRL():
 
         loss_disc = F.binary_cross_entropy_with_logits(disc_output.flatten(), logits.float())
 
-        # adding new penalty here
-        lambda_penalty = 0.5
-        # print(f"{next_obs.shape=}")
+        # # adding new penalty here
+        # lambda_penalty = 0.5
+        # # print(f"{next_obs.shape=}")
         min_laser_dist = th.min(next_obs[:,0:9], dim=1).values
-        # print(f"{min_laser_dist.shape=}")
-        
+        dist_to_goal = next_obs[:,10]
+
         if(self.env == self.env.unwrapped):
             collision_flags = min_laser_dist<th.Tensor([self.env.envs[0].agent_settings.collision_dist]).type(th.float).to(min_laser_dist.device)
+            target = dist_to_goal<self.env.envs[0].agent_settings.goal_dist
         else:
             collision_flags = min_laser_dist<th.Tensor([self.env.envs[0].unwrapped.agent_settings.collision_dist]).type(th.float).to(min_laser_dist.device)
+            target = dist_to_goal<self.env.envs[0].unwrapped.agent_settings.goal_dist
 
-        collision_penalty = collision_flags * th.clamp(self.disc.h_net(next_obs)-self.disc.h_net(obs), min=0)
-        regularization = lambda_penalty * collision_penalty.mean()
+        goal_true_rew = []
+        for i in range(len(collision_flags)):
+            if(collision_flags[i].item==1):
+                goal_true_rew.append(1) # output class for collision
+            elif target[i].item==1:
+                goal_true_rew.append(2) # output class for reaching goal target
+            else:
+                goal_true_rew.append(0) # output class for while reaching target
+        goal_true_rew = th.Tensor(goal_true_rew).type(th.int8).to(min_laser_dist.device).unsqueeze(1)
+        # with th.no_grad():
+        #     print(f"{goal_true_rew.shape=}")
+        #     print(f"{self.disc.goal_net(next_obs).argmax(dim=1).shape=}")
+        goal_pred = self.disc.goal_f(next_obs,
+                                     no_grad=False).argmax(dim=1).type(th.int8).unsqueeze(1)
+            
+        goal_pred.requires_grad=True
+        assert goal_pred.requires_grad == True
+        loss_goal_net = F.cross_entropy(goal_pred, goal_true_rew)
+        # collision_penalty = collision_flags * th.clamp(self.disc.h_net(next_obs)-self.disc.h_net(obs), min=0)
+        # regularization = lambda_penalty * collision_penalty.mean()
 
-        total_loss = loss_disc + regularization
+        # total_loss = loss_disc + regularization
 
+        # update gradient discriminator
         self.optim_disc.zero_grad()
-        # loss_disc.backward()
-        total_loss.backward()
+        loss_disc.backward()
+        # total_loss.backward()
         self.optim_disc.step()
+
+        # update gradient goal_net
+        self.optim_goal_net.zero_grad()
+        loss_goal_net.backward()
+        self.optim_goal_net.step()
+
 
         if self.learning_steps_disc % self.irl_params.epoch_disc == 0:
             self.writer.add_scalar(

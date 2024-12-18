@@ -22,6 +22,11 @@ disc_optimizer:
   _target_: torch.optim.adam.Adam
   lr: 3.0e-4
 
+#Optimizer for goal network
+goal_net_optimizer:
+  _target_: torch.optim.adam.Adam
+  lr: 1e-03
+
 #update period for discriminator 
 epoch_disc: 6
 
@@ -32,6 +37,9 @@ units_disc_r:
 - [128, 128]
 
 units_disc_v:
+- [128, 128]
+
+units_disc_g:
 - [128, 128]
 
 
