@@ -117,12 +117,19 @@ class AIRLDiscriminator(nn.Module):
         
         goal_net.append(nn.Softmax(dim=1))
         self.goal_net = nn.Sequential(*goal_net)
-        score_collision = -1
-        score_goal = 1
-        score_while_reaching = 0
-        self.label_mapping = lambda x: th.where(x == 0, score_while_reaching, th.where(x == 1, score_collision, score_goal))
+        
+        # Define score mapping: [score_while_reaching, score_collision, score_goal]
+        self.score_mapping = th.tensor([0, -1, 1], dtype=th.float32)
+
 
         self.gamma = gamma
+
+    def get_device(self):
+        # Get the device of the first parameter (usually the same for all parameters)
+        return next(self.parameters()).device
+
+    def label_mapping(self, predictions):
+            return self.score_mapping[predictions]
 
     def f(self, 
           states: th.Tensor, 
@@ -148,8 +155,13 @@ class AIRLDiscriminator(nn.Module):
         vs = self.h_net(states)
         next_vs = self.h_net(next_states)
 
-        goal_rew = self.label_mapping(self.goal_f(next_states,
-                                                    no_grad=True).argmax(dim=1).type(th.int8)).unsqueeze(1)
+
+        logits = self.goal_f(next_states, no_grad=True)
+        goal_predictions = logits.argmax(dim=1).cpu()
+
+        # Map predictions to goal rewards
+        goal_rew = self.label_mapping(goal_predictions).unsqueeze(1).to(self.get_device())  # Ensure correct shape
+        
         # print(f"{next_states=}")
         # print(f"{goal_rew=}")
         return rs + self.gamma * (1 - dones) * next_vs - vs + goal_rew
@@ -615,15 +627,15 @@ class AIRL():
                 goal_true_rew.append(2) # output class for reaching goal target
             else:
                 goal_true_rew.append(0) # output class for while reaching target
-        goal_true_rew = th.Tensor(goal_true_rew).type(th.int8).to(min_laser_dist.device).unsqueeze(1)
+        goal_true_rew = th.tensor(goal_true_rew, dtype=th.long, device=min_laser_dist.device)
         # with th.no_grad():
         #     print(f"{goal_true_rew.shape=}")
         #     print(f"{self.disc.goal_net(next_obs).argmax(dim=1).shape=}")
-        goal_pred = self.disc.goal_f(next_obs,
-                                     no_grad=False).argmax(dim=1).type(th.int8).unsqueeze(1)
+        goal_pred = self.disc.goal_f(next_obs, no_grad=False)
             
-        goal_pred.requires_grad=True
+        # goal_pred.requires_grad=True
         assert goal_pred.requires_grad == True
+        assert goal_pred.shape[0] == goal_true_rew.shape[0], "Batch size mismatch!"
         loss_goal_net = F.cross_entropy(goal_pred, goal_true_rew)
         # collision_penalty = collision_flags * th.clamp(self.disc.h_net(next_obs)-self.disc.h_net(obs), min=0)
         # regularization = lambda_penalty * collision_penalty.mean()
