@@ -116,11 +116,15 @@ class PPO_Agent_NN(nn.Module):
             activation,
             layer_init(nn.Linear(64, 64)),
             activation,
+            layer_init(nn.Linear(64, 64)),
+            activation,
             layer_init(nn.Linear(64, 1), std=1.0),
         )
 
         actor_layer = [nn.Linear(
             np.array(envs.single_observation_space.shape).prod(), 64), activation]
+        actor_layer.append(layer_init(nn.Linear(64, 64)))
+        actor_layer.append(activation)
         actor_layer.append(layer_init(nn.Linear(64, 64)))
         actor_layer.append(activation)
         actor_layer.append(layer_init(
