@@ -86,6 +86,9 @@ class Buffer(SerializedBuffer):
 class ModifiedBuffer():
     def __init__(self, device):
         self.device = device
+        self.latest_idx = 0
+        self.num_ep = 0
+        self.choices = []
 
     def load(self, path):
         data = torch.load(path, 
@@ -120,9 +123,20 @@ class ModifiedBuffer():
 
             self.rank[i_traj] = torch.Tensor([data[i_traj][1]['rank']]).to(self.device)
 
+        self.choices = self.sampling_choice()
+        #reset every load new expert trajectory
+        self.latest_idx = 0
+    
+    def sampling_choice(self):
+        return np.random.choice(self.num_ep, 50, p=self.rank.reshape(-1).cpu().numpy(), replace=False)
+    
     # customize in this function
     def sample(self, batch_size):
-        id_ep = np.random.choice(self.num_ep, 1, p=self.rank.reshape(-1).cpu().numpy()).item()
+        if(self.latest_idx>=self.num_ep):
+            self.latest_idx = 0
+            self.choices = self.sampling_choice()
+        id_ep = self.choices[self.latest_idx]
+        self.latest_idx+=1
         idxes = torch.randint(low=0, high=self.num_ep_traj, size=(batch_size,))
         return (
             self.states[id_ep][idxes],
