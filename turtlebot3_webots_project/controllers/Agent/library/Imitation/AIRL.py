@@ -430,15 +430,17 @@ class AIRL():
                 # so terminal state when state[0:10] < thresh_collision and state[10]<thresh_goal
                 # done is applied after 
                 # print(f"{states.shape=}")
-                laser_min = th.min(obs[:,0:9], dim=1).values
+                # laser_min = th.min(obs[:,0:9], dim=1).values
                 dist_to_goal = obs[:,10]
 
                 if(self.env == self.env.unwrapped):
-                    dones = th.logical_or(laser_min<self.env.envs[0].agent_settings.collision_dist,
-                                          dist_to_goal<self.env.envs[0].agent_settings.goal_dist)
+                    # dones = th.logical_or(laser_min<self.env.envs[0].agent_settings.collision_dist,
+                    #                       dist_to_goal<self.env.envs[0].agent_settings.goal_dist)
+                    dones = dist_to_goal<self.env.envs[0].agent_settings.goal_dist
                 else:
-                    dones = th.logical_or(laser_min<self.env.envs[0].unwrapped.agent_settings.collision_dist,
-                                          dist_to_goal<self.env.envs[0].unwrapped.agent_settings.goal_dist)
+                    # dones = th.logical_or(laser_min<self.env.envs[0].unwrapped.agent_settings.collision_dist,
+                    #                       dist_to_goal<self.env.envs[0].unwrapped.agent_settings.goal_dist)
+                    dones = dist_to_goal<self.env.envs[0].unwrapped.agent_settings.goal_dist
                 dones = dones.unsqueeze(1).int()
 
                 # Samples from expert's demonstrations.
@@ -473,14 +475,16 @@ class AIRL():
             # so terminal state when state[0:10] < thresh_collision and state[10]<thresh_goal
             # done is applied after 
             # print(f"{states.shape=}")
-            laser_min = th.min(new_obs[:,0:9], dim=1).values
+            # laser_min = th.min(new_obs[:,0:9], dim=1).values
             dist_to_goal = new_obs[:,10]
             if(self.env == self.env.unwrapped):
-                new_dones = th.logical_or(laser_min<self.env.envs[0].agent_settings.collision_dist,
-                                      dist_to_goal<self.env.envs[0].agent_settings.goal_dist)
+                # new_dones = th.logical_or(laser_min<self.env.envs[0].agent_settings.collision_dist,
+                #                       dist_to_goal<self.env.envs[0].agent_settings.goal_dist)
+                new_dones = dist_to_goal<self.env.envs[0].agent_settings.goal_dist
             else:
-                new_dones = th.logical_or(laser_min<self.env.envs[0].unwrapped.agent_settings.collision_dist,
-                                      dist_to_goal<self.env.envs[0].unwrapped.agent_settings.goal_dist)
+                # new_dones = th.logical_or(laser_min<self.env.envs[0].unwrapped.agent_settings.collision_dist,
+                #                       dist_to_goal<self.env.envs[0].unwrapped.agent_settings.goal_dist)
+                new_dones = dist_to_goal<self.env.envs[0].unwrapped.agent_settings.goal_dist
             new_dones = new_dones.unsqueeze(1).int()
 
             # Calculate rewards.
@@ -547,8 +551,25 @@ class AIRL():
 
         loss_disc = F.binary_cross_entropy_with_logits(disc_output.flatten(), logits.float())
 
+        # adding new penalty here
+        lambda_penalty = 0.5
+        # print(f"{next_obs.shape=}")
+        min_laser_dist = th.min(next_obs[:,0:9], dim=1).values
+        # print(f"{min_laser_dist.shape=}")
+        
+        if(self.env == self.env.unwrapped):
+            collision_flags = min_laser_dist<th.Tensor([self.env.envs[0].agent_settings.collision_dist]).type(th.float).to(min_laser_dist.device)
+        else:
+            collision_flags = min_laser_dist<th.Tensor([self.env.envs[0].unwrapped.agent_settings.collision_dist]).type(th.float).to(min_laser_dist.device)
+
+        collision_penalty = collision_flags * th.clamp(self.disc.h_net(next_obs)-self.disc.h_net(obs), min=0)
+        regularization = lambda_penalty * collision_penalty.mean()
+
+        total_loss = loss_disc + regularization
+
         self.optim_disc.zero_grad()
-        loss_disc.backward()
+        # loss_disc.backward()
+        total_loss.backward()
         self.optim_disc.step()
 
         if self.learning_steps_disc % self.irl_params.epoch_disc == 0:
