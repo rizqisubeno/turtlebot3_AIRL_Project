@@ -108,14 +108,14 @@ class PPOEncoder(nn.Module):
 
         if self.block_type == "mlp":
             self.encoder = MLPBlock(hidden_dim, 
-                                    activation=nn.Tanh,
+                                    activation=nn.ReLU,
                                     dtype=dtype)
         elif self.block_type == "residual":
             self.fc = nn.Linear(input_dim, hidden_dim)
             self.fc.apply(orthogonal_init(1.0))
             self.blocks = nn.ModuleList(
                 [ResidualBlock(hidden_dim, 
-                               activation=nn.Tanh,
+                               activation=nn.ReLU,
                                dtype=dtype) for _ in range(self.num_blocks)]
             )
             self.norm = nn.LayerNorm(hidden_dim)
