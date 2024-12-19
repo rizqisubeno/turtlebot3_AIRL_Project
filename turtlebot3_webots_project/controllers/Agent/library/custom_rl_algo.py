@@ -33,7 +33,7 @@ from torch.utils.tensorboard.writer import SummaryWriter
 
 from .clipped_gaussian import ClippedGaussian
 from .Imitation.buffer import RolloutBuffer
-from .Simba_Network import SACEncoder
+from .Simba_Network import SACEncoder, PPOEncoder
 
 LOG_LEVEL = logging.DEBUG
 LOGFORMAT = "  %(log_color)s%(levelname)-8s%(reset)s | %(log_color)s%(message)s%(reset)s"
@@ -110,26 +110,39 @@ class PPO_Agent_NN(nn.Module):
         self.high = torch.from_numpy(
             self.envs.action_space.high).to(self.device)
 
-        self.critic = nn.Sequential(
-            layer_init(
-                nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
-            activation,
-            layer_init(nn.Linear(64, 64)),
-            activation,
-            layer_init(nn.Linear(64, 64)),
-            activation,
-            layer_init(nn.Linear(64, 1), std=1.0),
-        )
+        critic = nn.ModuleList()
+        critic.append(PPOEncoder(block_type="residual",
+                                 input_dim=envs.single_observation_space.shape[0],
+                                 num_blocks=2,
+                                 hidden_dim=64,))
+        critic.append(nn.Linear(64, 1))
+        self.critic = nn.Sequential(*critic)
+        # self.critic = nn.Sequential(
+        #     layer_init(
+        #         nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
+        #     activation,
+        #     layer_init(nn.Linear(64, 64)),
+        #     activation,
+        #     layer_init(nn.Linear(64, 64)),
+        #     activation,
+        #     layer_init(nn.Linear(64, 1), std=1.0),
+        # )
 
-        actor_layer = [nn.Linear(
-            np.array(envs.single_observation_space.shape).prod(), 64), activation]
-        actor_layer.append(layer_init(nn.Linear(64, 64)))
-        actor_layer.append(activation)
-        actor_layer.append(layer_init(nn.Linear(64, 64)))
-        actor_layer.append(activation)
-        actor_layer.append(layer_init(
-            nn.Linear(64, np.prod(envs.single_action_space.shape)), std=0.01))
-        actor_layer.append(activation) if use_tanh_output else None
+        actor_layer = nn.ModuleList()
+        actor_layer.append(PPOEncoder(block_type="residual",
+                                      input_dim=envs.single_observation_space.shape[0],
+                                      num_blocks=2,
+                                      hidden_dim=64,))
+        actor_layer.append(layer_init(nn.Linear(64, np.prod(envs.single_action_space.shape)), std=0.01))
+        # actor_layer = [nn.Linear(
+        #     np.array(envs.single_observation_space.shape).prod(), 64), activation]
+        # actor_layer.append(layer_init(nn.Linear(64, 64)))
+        # actor_layer.append(activation)
+        # actor_layer.append(layer_init(nn.Linear(64, 64)))
+        # actor_layer.append(activation)
+        # actor_layer.append(layer_init(
+        #     nn.Linear(64, np.prod(envs.single_action_space.shape)), std=0.01))
+        # actor_layer.append(activation) if use_tanh_output else None
 
         self.actor_mean = nn.Sequential(*actor_layer)
         # print(f"{self.actor_mean}")
@@ -226,15 +239,22 @@ class PPO():
 
         self.logger = Logger()
 
-        self.env = env
-        self.num_envs = 1
-
         self.bypass_class_cfg = bypass_class_cfg
         if (not self.bypass_class_cfg):
             params_cfg = self.hydra_params_read(config_path, config_name)
             self.params = self.read_param_cfg(params_cfg=params_cfg)
         else:
             self.params = rl_params
+
+        if (self.params.use_rsnorm):
+            self.logger.print("info", "Using Running Statistic Normalization")
+            self.env = NormalizeObservation(env,
+                                            epsilon=1e-8,
+                                            is_training=True)
+        else:
+            self.env = env
+
+        self.num_envs = 1
 
         self.batch_size = self.num_envs * self.params.num_steps
         self.minibatch_size = self.batch_size // self.params.num_minibatches

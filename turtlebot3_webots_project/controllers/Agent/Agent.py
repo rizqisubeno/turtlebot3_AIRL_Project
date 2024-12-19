@@ -349,7 +349,7 @@ def customRLProgram(
     )
 
     if algo == "PPO":
-        model = PPO(env=roboAgent, config_path="./config", config_name=exp_name)
+        model = PPO(env=roboAgent, config_path="./config", config_name=exp_name, bypass_class_cfg=False)
         model.train(total_timesteps=int(256e4))
     elif algo == "SAC":
         model = SAC(env=roboAgent, config_path="./config", config_name=exp_name)
@@ -460,9 +460,9 @@ if __name__ == "__main__":
     # using exp_name matched the configuration on config folder
     # customRLProgram(algo="SAC",
     #                 exp_name="rl_sac")
-    # customRLProgram(algo="PPO", exp_name="rl_ppo_gaussian")
+    customRLProgram(algo="PPO", exp_name="rl_ppo_gaussian")
     # customRLProgram(algo="PPO",
     #                 exp_name="rl_ppo_clippedgaussian")
 
     # Here we go, Custom IRL Program (AIRL)
-    CustomAIRLProgram(exp_name="airl")
+    # CustomAIRLProgram(exp_name="airl")

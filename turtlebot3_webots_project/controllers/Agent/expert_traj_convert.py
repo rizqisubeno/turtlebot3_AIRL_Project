@@ -3,6 +3,7 @@ import numpy as np
 import torch as th
 
 import matplotlib.pyplot as plt
+from .library.normalize import NormalizeObservation
 
 # (NEW) try to add ranking
 

@@ -5,7 +5,7 @@ save_every_reset: True
 save_every_step: False
 
 #optional if save every n step or reset true otherwise you can uncomment
-save_step: 10
+save_step: 20
 
 #save path
 save_path: ./models/RL_PPO_Gaussian
@@ -86,5 +86,8 @@ kle_stop: False
 
 #rollback previous policy if KL exceeds target-kl
 kle_rollback: True
+
+#trying use rsnorm (Running Statistics Normalization) (RSNorm->Running Mean Std)
+use_rsnorm: True
 
 
