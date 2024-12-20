@@ -82,12 +82,12 @@ distributions: Normal
 use_icm: False
 
 #stopping update policy if KL exceeds target-kl 
-kle_stop: False
+kle_stop: True
 
 #rollback previous policy if KL exceeds target-kl
-kle_rollback: True
+kle_rollback: False
 
 #trying use rsnorm (Running Statistics Normalization) (RSNorm->Running Mean Std)
-use_rsnorm: True
+use_rsnorm: False
 
 

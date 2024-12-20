@@ -111,38 +111,34 @@ class PPO_Agent_NN(nn.Module):
             self.envs.action_space.high).to(self.device)
 
         critic = nn.ModuleList()
-        critic.append(PPOEncoder(block_type="residual",
-                                 input_dim=envs.single_observation_space.shape[0],
-                                 num_blocks=2,
-                                 hidden_dim=64,))
-        critic.append(nn.Linear(64, 1))
+        # critic.append(PPOEncoder(block_type="residual",
+        #                          input_dim=envs.single_observation_space.shape[0],
+        #                          num_blocks=2,
+        #                          hidden_dim=128,))
+        critic.append(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64))
+        # critic.append(nn.LayerNorm(64)) # we adding layer norm
+        critic.append(activation)
+        critic.append(layer_init(nn.Linear(64, 64)))
+        critic.append(activation)
+        critic.append(layer_init(nn.Linear(64, 64)))
+        critic.append(activation)
+        critic.append(layer_init(nn.Linear(64, 1), std=1.0))
         self.critic = nn.Sequential(*critic)
-        # self.critic = nn.Sequential(
-        #     layer_init(
-        #         nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64)),
-        #     activation,
-        #     layer_init(nn.Linear(64, 64)),
-        #     activation,
-        #     layer_init(nn.Linear(64, 64)),
-        #     activation,
-        #     layer_init(nn.Linear(64, 1), std=1.0),
-        # )
 
         actor_layer = nn.ModuleList()
-        actor_layer.append(PPOEncoder(block_type="residual",
-                                      input_dim=envs.single_observation_space.shape[0],
-                                      num_blocks=2,
-                                      hidden_dim=64,))
+        # actor_layer.append(PPOEncoder(block_type="residual",
+        #                               input_dim=envs.single_observation_space.shape[0],
+        #                               num_blocks=2,
+        #                               hidden_dim=128,))
+        actor_layer.append(nn.Linear(np.array(envs.single_observation_space.shape).prod(), 64))
+        # actor_layer.append(nn.LayerNorm(64)) # we adding layer norm
+        actor_layer.append(activation)
+        actor_layer.append(layer_init(nn.Linear(64, 64)))
+        actor_layer.append(activation)
+        actor_layer.append(layer_init(nn.Linear(64, 64)))
+        actor_layer.append(activation)
         actor_layer.append(layer_init(nn.Linear(64, np.prod(envs.single_action_space.shape)), std=0.01))
-        # actor_layer = [nn.Linear(
-        #     np.array(envs.single_observation_space.shape).prod(), 64), activation]
-        # actor_layer.append(layer_init(nn.Linear(64, 64)))
-        # actor_layer.append(activation)
-        # actor_layer.append(layer_init(nn.Linear(64, 64)))
-        # actor_layer.append(activation)
-        # actor_layer.append(layer_init(
-        #     nn.Linear(64, np.prod(envs.single_action_space.shape)), std=0.01))
-        # actor_layer.append(activation) if use_tanh_output else None
+        actor_layer.append(activation) if use_tanh_output else None
 
         self.actor_mean = nn.Sequential(*actor_layer)
         # print(f"{self.actor_mean}")

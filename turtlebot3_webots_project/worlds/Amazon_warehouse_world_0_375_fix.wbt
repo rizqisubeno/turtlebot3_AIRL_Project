@@ -559,6 +559,8 @@ CardboardBox {
   name "cardboard box(1)"
 }
 DEF TurtleBot3Burger TurtleBot3Burger {
+  hidden rotation_9 0 -0.9999999999999999 0 1.5707959988578355
+  hidden rotation_10 -0.7071047815925108 2.2749428785333925e-15 -0.7071087807749299 3.1415879999999974
   translation -0.39 -0.3 0.124084
   rotation 0 0 1 0
   controller "<extern>"
