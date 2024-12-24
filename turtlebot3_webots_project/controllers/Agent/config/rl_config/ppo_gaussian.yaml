@@ -90,4 +90,6 @@ kle_rollback: False
 #trying use rsnorm (Running Statistics Normalization) (RSNorm->Running Mean Std)
 use_rsnorm: False
 
+# use reward normalization
+use_reward_norm: True
 

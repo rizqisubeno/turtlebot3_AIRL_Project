@@ -28,9 +28,11 @@ from torch.utils.tensorboard.writer import SummaryWriter
 # scenario list
 from scenario_list import list_robot_scenario, max_robot_scenario
 
+# curriculum learning
+from .curriculum import TeacherExp3
 
 # for prettier logging on terminal
-def logger(mode: str = "", head_name: str = "", str_name: str = ""):
+def logger(mode: str = "", head_name: str | None = "", str_name: str = ""):
     head = ""
     if "info" in mode:
         head = AnsiCodes.BLUE_BACKGROUND
@@ -48,14 +50,14 @@ def logger(mode: str = "", head_name: str = "", str_name: str = ""):
         head = AnsiCodes.RESET
 
     if head_name is None:
-        print(head + f"{str_name}" + AnsiCodes.RESET)
+        print(f"{head}{str_name}{AnsiCodes.RESET}")
     else:
         # tab_times = 2-(int((len(head_name))/9))
         tab_times = 2 if len(head_name) < 10 else 1
         print(
-            head
+            str(head)
             + str(f"[{head_name}]")
-            + AnsiCodes.RESET
+            + str(AnsiCodes.RESET)
             + str("\t" * tab_times)
             + str_name
         )
@@ -90,6 +92,15 @@ class Agent(gym.Env):
             scene_configuration, verbose=verbose
         )
 
+        if ("TeacherExp3" in self.scene_cfg.scene_change_config):
+            #define class for teacher curriculum learning
+            self.curriculum = TeacherExp3(list_robot_scenario, gamma=0.2)
+            #define before syncvectorreset need variable to change scenario before reset autocalling
+            self.next_step_is_done = False
+            self.next_step_scenario_idx = 0
+        elif ("classic" in self.scene_cfg.scene_change_config):
+            # not defined specific every scenario
+            pass
         # get info node
         self.agent_node, self.target_node, self.info_node = self.read_webots_node(
             verbose=verbose
@@ -163,6 +174,8 @@ class Agent(gym.Env):
                 )
             ),
         )
+        # last step each scenario reward and success rate for debugging
+        self.last_step_graph = np.zeros(self.max_scenario, dtype=np.int_)
 
     def read_webots_node(self, verbose=False):
         head_name = "TB3Py_read_node"
@@ -281,6 +294,8 @@ class Agent(gym.Env):
             self.step_idx += 1
             self.idx += 1
             self.agent_publisher.is_got_reply = False
+            # adding counter to last step graph
+            self.last_step_graph[self.scenario_idx] += 1
         # logger("info", "Py", "agent publisher got reply on step")
         # stepping in this area
         self.agent.step()
@@ -314,6 +329,10 @@ class Agent(gym.Env):
             self.reward_list.append(reward)
         # logger("info", "Py", f"{info=}")
         truncated = True if self.idx >= self.scene_cfg.max_steps else False
+        # check if teacherexp3 used
+        if ("TeacherExp3" in self.scene_cfg.scene_change_config):
+            if self.idx + 1 == self.scene_cfg.max_steps and fixed_steps:
+                self.next_step_is_done = True
         target = [
             True if (key == "target" and value) else False
             for key, value in info.items()
@@ -386,7 +405,10 @@ class Agent(gym.Env):
             info["episode"] = {"r": reward_total, "l": self.idx}
             # adding to tensorboard
             self.writer.add_scalar(
-                f"Reward/scene_{self.scenario_idx+1}", reward_total, self.step_idx
+                f"Reward/scene_{self.scenario_idx+1}", reward_total, self.last_step_graph[self.scenario_idx],
+            )
+            self.writer.add_scalar(
+                f"success/scene_{self.scenario_idx+1}", 1 if target else 0, self.last_step_graph[self.scenario_idx],
             )
             self.reward_list = []
             # print(f"{self.reward_list=}")
@@ -404,15 +426,18 @@ class Agent(gym.Env):
             or "step" not in self.agent_publisher.subscriptions
         ):
             self.agent_publisher.receiveSubscriptions()
-        if (
-            self.success_counter >= self.scene_cfg.change_scene_every_goal_reach
-            and self.eval == False
-        ):
-            self.success_counter = 0
-            self.scenario_idx += 1
-            if self.scenario_idx >= max_robot_scenario:
-                self.scenario_idx = 0
-                self.scenario_reach_end = True
+
+        if "classic" in self.scene_cfg.scene_change_config:   
+            if (self.success_counter >= self.scene_cfg.change_scene_every_goal_reach
+                and self.eval == False):
+                self.success_counter = 0
+                self.scenario_idx += 1
+                if self.scenario_idx >= max_robot_scenario:
+                    self.scenario_idx = 0
+                    self.scenario_reach_end = True
+        elif "TeacherExp3" in self.scene_cfg.scene_change_config:
+            #the value passed by custom rl algorithm
+            self.scenario_idx = self.next_step_scenario_idx
         start_msg = start_agent_msg()
         start_msg.idx = self.start_idx
         start_msg.agent_state = "r"

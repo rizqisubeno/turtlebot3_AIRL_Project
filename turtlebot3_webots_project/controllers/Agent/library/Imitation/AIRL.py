@@ -263,7 +263,7 @@ class AIRLDiscriminator(nn.Module):
         elif ("airl_base" in reward_type):
             return self.g_net(states)
         else:
-            return SystemError("reward_type is not defined")
+            raise SystemError("reward_type is not defined")
 
 
 class AIRL():
@@ -347,7 +347,8 @@ class AIRL():
 
         # checking the ppo buffer_size must be same with irl buffer_size 
         # for balancing when learning discriminator for expert buffer
-        assert int(self.rl_algo.minibatch_size) == int(self.irl_params.batch_size)
+        # dropping this support because we can sampling after rollout ppo first
+        # assert int(self.rl_algo.minibatch_size) == int(self.irl_params.batch_size)
 
         #checking mismatch each other irl and rl params
         assert abs(float(self.rl_params.gamma)-float(self.irl_params.gamma))<=1e-5

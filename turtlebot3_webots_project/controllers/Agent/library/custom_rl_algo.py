@@ -35,6 +35,8 @@ from .clipped_gaussian import ClippedGaussian
 from .Imitation.buffer import RolloutBuffer
 from .Simba_Network import SACEncoder, PPOEncoder
 
+from scenario_list import *
+
 LOG_LEVEL = logging.DEBUG
 LOGFORMAT = "  %(log_color)s%(levelname)-8s%(reset)s | %(log_color)s%(message)s%(reset)s"
 logging.root.setLevel(LOG_LEVEL)
@@ -227,11 +229,11 @@ class PPO_Agent_NN(nn.Module):
 class PPO():
     def __init__(self,
                  env,
-                 config_path: str,
-                 config_name: str,
+                 config_path: str | None,
+                 config_name: str | None,
                  # for airl purpose so not need parsing config again
                  bypass_class_cfg: Optional[bool] = False,
-                 rl_params: Optional[dict] = None):
+                 rl_params: Optional[dict] | SimpleNamespace = None):
 
         self.logger = Logger()
 
@@ -363,6 +365,11 @@ class PPO():
               total_timesteps: Optional[int] = int(1e6)):
         self.num_iterations = int(total_timesteps // self.batch_size)
 
+        if hasattr(self.env.envs[0], 'curriculum'):
+            self.logger.print("info", "Curriculum Learning Used on Env")
+            self.weights_all = np.empty((self.num_iterations, max_robot_scenario))
+            self.arm_probs_all = np.empty((self.num_iterations, max_robot_scenario))
+
         for iteration in range(1, self.num_iterations + 1):
             # Annealing the rate if instructed to do so.
             if self.params.anneal_lr:
@@ -371,15 +378,22 @@ class PPO():
                 self.optimizer.param_groups[0]["lr"] = lrnow
 
             if (iteration == 1):
+                # if teacherexp3 used use this
+                if hasattr(self.env.envs[0], 'curriculum'):
+                    # pull an arm
+                    task = self.env.envs[0].curriculum.get_task()
+                    self.logger.print("info", f"1Task change to : {task}")
+
                 # TRY NOT TO MODIFY: start the game
                 self.global_step = 0
                 self.start_time = time.time()
                 next_ob, _ = self.env.reset(seed=self.params.seed)
                 next_ob = torch.Tensor(next_ob).to(self.device)
                 self.temp_next_ob = next_ob
-                self.do_rollout(start_obs=next_ob)
+                self.do_rollout(iteration,
+                                start_obs=next_ob)
             else:
-                self.do_rollout()
+                self.do_rollout(iteration,)
 
             if (self.params.use_icm):
                 self.update_icm()
@@ -387,10 +401,13 @@ class PPO():
             batch_data = self.calculate_gae()
             self.update_ppo(batch_data)
 
+
+
         self.env.envs[0].writer.close()
         self.env.close()
 
     def do_rollout(self,
+                   iteration,
                    start_obs: Optional[torch.Tensor] = None):
         next_ob = self.temp_next_ob
         for step in range(0, self.params.num_steps):
@@ -411,8 +428,15 @@ class PPO():
             action_clipped = np.clip(action.cpu().numpy(),
                                      a_min=self.env.action_space.low,
                                      a_max=self.env.action_space.high)
-            next_ob, reward, next_termination, next_truncation, info = self.env.step(
-                action_clipped)
+            next_ob, reward, next_termination, next_truncation, info = self.env.step(action_clipped)
+
+            if (self.params.use_reward_norm):
+                # print(f"reward before : {reward}")
+                clipped = np.clip(a=np.array(reward), 
+                                  a_min=-10, 
+                                  a_max=10)
+                reward = 2*((clipped-(-10))/(10-(-10)))-1
+                # print(f"reward after : {reward}")
 
             assert not np.isnan(action_clipped).any()
 
@@ -437,6 +461,20 @@ class PPO():
                                    next_termination, next_truncation)).to(self.device),
                                reward=torch.tensor(reward).to(self.device).view(-1))
 
+            # if teacherexp3 used
+            if hasattr(self.env.envs[0], 'curriculum'):
+                if(self.env.envs[0].next_step_is_done):
+                    print(f"idx env : {self.env.envs[0].idx}")
+                    #change scenario by providing the task
+                    last_task = self.env.envs[0].scenario_idx
+                    task = self.env.envs[0].curriculum.get_task()
+                    self.env.envs[0].next_step_scenario_idx = task
+                    self.logger.print("info", f"2Task change to : {task}")
+                    
+                    #resseting variable next step is done
+                    self.env.envs[0].next_step_is_done = False
+
+
             # writing returns episode and length episode
             if "final_info" in info:
                 for info in info["final_info"]:
@@ -446,10 +484,19 @@ class PPO():
                             "charts/episodic_return", info["episode"]["r"], self.global_step)
                         self.env.envs[0].writer.add_scalar(
                             "charts/episodic_length", info["episode"]["l"], self.global_step)
-                        self.temp_next_ob = next_ob
+                        # if teacherexp3 used update this function
+                        if hasattr(self.env.envs[0], 'curriculum'):
+                            self.env.envs[0].curriculum.update(last_task, info["episode"]["r"])
+                            self.weights_all[iteration] = self.env.envs[0].curriculum._log_weights
+                            self.arm_probs_all[iteration] = self.env.envs[0].curriculum.task_probabilities
+                            self.logger.print("info", f"weights: {self.weights_all[iteration]}")
+                            self.logger.print("info", f"arm_probs: {self.arm_probs_all[iteration]}")
+
+                        # self.temp_next_ob = next_ob
                         # print(f"{self.temp_next_ob=}")
                         if ("reset" in self.save_config):
                             self.reset_counter += 1
+
 
             # saving model every step (inside rollout)
             if ("reset" in self.save_config):
@@ -467,6 +514,8 @@ class PPO():
                     self.agent.save_model(self.params.save_path,
                                           self.params.exp_name,
                                           int(self.save_iter))
+
+        self.temp_next_ob = next_ob
 
     def update_icm(self):
         rollout_data = self.buffer.get()

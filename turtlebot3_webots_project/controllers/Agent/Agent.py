@@ -321,19 +321,21 @@ def agent_checker():
 def customRLProgram(
     algo: str,
     exp_name: str,
-):
+    ):
     agent_settings = {
         "goal_dist": 0.11,  # in meter
         "collision_dist": 0.12,  # in meter
         "lidar_for_state": 9,  # number of state lidar read (default=10)
-        "gamma": 0.993,
+        "gamma": 0.995,
     }
 
     scene_configuration = {
         "change_scene_every_goal_reach": 5,  # change the scenario every n goal reach
         "scene_start_from": 0,  # scene start from n
         "random_start": False,  # whether start from x and y coordinate random or not
-        "max_steps": 1280,  # set to maximum integer value
+        "max_steps": 1280,  # set to maximum integer value,
+        # set "TeacherExp3" if want TeacherExp3 Curriculum or "classic" to classical change new task based scenario list
+        "scene_change_config": "classic",    
     }
 
     roboAgent = gym.vector.SyncVectorEnv(
