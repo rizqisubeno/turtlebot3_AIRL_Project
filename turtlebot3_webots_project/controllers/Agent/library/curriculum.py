@@ -5,12 +5,10 @@ class TeacherExp3(object):
   https://rlcurriculum.github.io/
   """
 
-  def __init__(self, tasks, gamma=0.3):
+  def __init__(self, tasks, alpha=0.3):
     self._tasks = tasks
     self._n_tasks = len(self._tasks)
-    self._gamma = gamma
-    self._log_weights = np.zeros(self._n_tasks)
-    # first scenario sampling is from scenario 0 first
+    self.Q = np.zeros(self._n_tasks)
     self.first_scenario = True
     
   @property

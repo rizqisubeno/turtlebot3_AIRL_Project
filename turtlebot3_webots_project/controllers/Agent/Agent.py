@@ -7,6 +7,7 @@
 # Modifications: - Communication using zeromq
 #                - Publish start and step message. Subscribe state data from Robot
 import os
+import re
 import sys
 from typing import Any
 
@@ -29,6 +30,8 @@ from numpy.typing import NDArray
 from stable_baselines3 import PPO as SB3_PPO
 from stable_baselines3 import SAC as SB3_SAC
 
+from library.conventional_controller import RobotController
+from scenario_list import *
 
 def scale_value(
     value: float | int,
@@ -42,7 +45,6 @@ def scale_value(
         output_max - output_min
     ) + output_min
     return scaled_value
-
 
 def create_demonstration():
     agent_settings = {
@@ -442,6 +444,129 @@ def check_demonstration(min_scene: int = 0, max_scene: int = 1):
 
             obs, _ = roboAgent.reset()
 
+def axis_ang_to_yaw(axis_ang):
+    s1 = np.sin(axis_ang[3] / 2)
+    q_w = np.cos(axis_ang[3] / 2)
+    q_x = axis_ang[0] * s1
+    q_y = axis_ang[1] * s1
+    q_z = axis_ang[2] * s1
+
+    t3 = +2.0 * (q_w * q_z + q_x * q_y)
+    t4 = +1.0 - 2.0 * (q_y**2 + q_z**2)
+    yaw = np.arctan2(t3, t4)
+
+    return yaw
+
+
+def TryConventionalMethod(save_path:str = "./goal_traj"):
+
+    if not os.path.exists(save_path):
+        os.makedirs(save_path)
+
+    agent_settings = {
+        "goal_dist": 0.11,  # in meter
+        "collision_dist": 0.12,  # in meter
+        "lidar_for_state": 9,  # number of state lidar read (default=10)
+        "gamma": 0.995,
+    }
+
+    scene_configuration = {
+        "change_scene_every_goal_reach": 9999,  # change the scenario every n goal reach
+        "scene_start_from": 0,  # scene start from n
+        "random_start": False,  # whether start from x and y coordinate random or not
+        "max_steps": 1280,  # set to maximum integer value
+        "scene_change_config": "classic",   
+    }
+
+    roboAgent = Agent(name_exp="conventional_method",
+                      agent_settings=agent_settings,
+                      scene_configuration=scene_configuration,
+                      fixed_steps=True,
+                      logging_reward=True,)
+
+    # PID gains for linear and angular controllers
+    kp_linear, ki_linear, kd_linear = 1.00, 0.01, 0.1
+    kp_angular, ki_angular, kd_angular = 0.73, 0.00003, 0.01
+
+    dt = roboAgent.timestep
+    # Initialize robot controller
+    robot_controller = RobotController(kp_linear, 
+                                       ki_linear, 
+                                       kd_linear, 
+                                       kp_angular, 
+                                       ki_angular, 
+                                       kd_angular, 
+                                       dt,
+                                       safe_distance=0.5)
+
+    # Robot's current state
+    robot_node = roboAgent.agent.getFromDef("TurtleBot3Burger")
+    trans_field = robot_node.getField("translation").getSFVec3f()
+    rot_field = robot_node.getField("rotation").getSFRotation()
+
+    current_x = trans_field[0]
+    current_y = trans_field[1]
+    current_theta = axis_ang_to_yaw(rot_field)  # Starting at (0,0) facing along the x-axis
+
+    # Goal position
+    goal_x, goal_y = list_robot_scenario[roboAgent.scenario_idx][4], list_robot_scenario[roboAgent.scenario_idx][5]
+
+    # create list x and y trajectory
+    traj_x = []
+    traj_y = []
+
+    obs, info = roboAgent.reset()
+    # Simulation loop
+    for scen in range(7):  # Run for 4 scenarios
+        for _ in range(1280):  # Run for 100 steps
+            linear_velocity, angular_velocity = robot_controller.compute_velocities(
+                current_x, current_y, current_theta, goal_x, goal_y, obs[:9]
+            )
+
+            # Robot's current state
+            robot_node = roboAgent.agent.getFromDef("TurtleBot3Burger")
+            trans_field = robot_node.getField("translation").getSFVec3f()
+            rot_field = robot_node.getField("rotation").getSFRotation()
+
+            current_x = trans_field[0]
+            current_y = trans_field[1]
+            traj_x.append(current_x)
+            traj_y.append(current_y)
+            current_theta = axis_ang_to_yaw(rot_field)  # Starting at (0,0) facing along the x-axis
+            # current_theta = rot_field[3]  # Starting at (0,0) facing along the x-axis
+            
+            next_obs, rew, term, trunc, info = roboAgent.step([linear_velocity, angular_velocity])
+            obs = next_obs
+
+            if 'target' in info:
+                if info['target']==True:
+                    roboAgent.scenario_idx += 1
+                    np.savez(os.path.join(save_path, f"goal_traj_{roboAgent.scenario_idx}.npz"), 
+                             x=traj_x, 
+                             y=traj_y)
+                    traj_x = []
+                    traj_y = []
+                    obs, info = roboAgent.reset()
+                    # Initialize robot controller
+                    robot_controller = RobotController(kp_linear, 
+                                                    ki_linear, 
+                                                    kd_linear, 
+                                                    kp_angular, 
+                                                    ki_angular, 
+                                                    kd_angular, 
+                                                    dt,
+                                                    safe_distance=0.5)
+
+                    # Robot's current state
+                    robot_node = roboAgent.agent.getFromDef("TurtleBot3Burger")
+                    trans_field = robot_node.getField("translation").getSFVec3f()
+                    rot_field = robot_node.getField("rotation").getSFRotation()
+
+                    current_x = trans_field[0]
+                    current_y = trans_field[1]
+                    current_theta = axis_ang_to_yaw(rot_field)  # Starting at (0,0) facing along the x-axis
+
+                    goal_x, goal_y = list_robot_scenario[roboAgent.scenario_idx][4], list_robot_scenario[roboAgent.scenario_idx][5]
 
 if __name__ == "__main__":
     # for mapping purpose using joystick
@@ -462,9 +587,10 @@ if __name__ == "__main__":
     # using exp_name matched the configuration on config folder
     # customRLProgram(algo="SAC",
     #                 exp_name="rl_sac")
-    customRLProgram(algo="PPO", exp_name="rl_ppo_gaussian")
+    #customRLProgram(algo="PPO", exp_name="rl_ppo_gaussian")
     # customRLProgram(algo="PPO",
     #                 exp_name="rl_ppo_clippedgaussian")
 
     # Here we go, Custom IRL Program (AIRL)
     # CustomAIRLProgram(exp_name="airl")
+    TryConventionalMethod()
