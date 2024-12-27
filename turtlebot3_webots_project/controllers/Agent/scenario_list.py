@@ -27,6 +27,6 @@ import numpy as np
 #                                 # [-0.380, -0.300, 0.124, -np.pi/2.0, 1.00, 3.00, 0.15],
 #                                 # [-0.380, -0.300, 0.124, -np.pi/2.0, 1.75, 3.23, 0.15],
 #                                 ], dtype=np.float32)
-list_robot_scenario = np.load('scenario_list.npz')['sceario_list']
+list_robot_scenario = np.load('scenario_list.npz')['scenario_list']
 
 max_robot_scenario = list_robot_scenario.shape[0]
