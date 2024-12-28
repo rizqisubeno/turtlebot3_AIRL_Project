@@ -224,8 +224,6 @@ class PPO_Agent_NN(nn.Module):
         self.logger.print("info", f"Model loaded from {path}")
 
 # specific for single environment only
-
-
 class PPO():
     def __init__(self,
                  env,
@@ -239,6 +237,9 @@ class PPO():
 
         self.bypass_class_cfg = bypass_class_cfg
         if (not self.bypass_class_cfg):
+
+            assert isinstance(config_path, str)
+            assert isinstance(config_name, str)
             params_cfg = self.hydra_params_read(config_path, config_name)
             self.params = self.read_param_cfg(params_cfg=params_cfg)
         else:
@@ -346,6 +347,9 @@ class PPO():
         # re-formatted dict
         new_cfg = {}
         for item in cfg.keys():
+
+            assert isinstance(cfg, dict)
+
             if (isinstance(cfg[item], dict)):
                 for sub_item in cfg[item].keys():
                     new_cfg[sub_item] = cfg[item][sub_item]
