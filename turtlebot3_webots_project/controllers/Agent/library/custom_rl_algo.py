@@ -311,7 +311,7 @@ class PPO():
             self.icm_optimizer = Adam(self.ICM.parameters(), lr=3e-4, eps=1e-8)
 
         try:
-            _ = self.env.unwrapped.writer
+            _ = self.env.envs[0].writer
             self.logger.print("info", "SummaryWriter Found on Env")
             self.env.envs[0].writer.add_text(
                 "rl_hyperparameters",
@@ -322,6 +322,12 @@ class PPO():
             self.logger.print("info", "Create SummaryWriter inside Env")
             self.env.envs[0].writer = SummaryWriter(
                 f"runs/{self.params.exp_name}")
+            
+            self.env.envs[0].writer.add_text(
+                "rl_hyperparameters",
+                "|param|value|\n|-|-|\n%s" % (
+                    "\n".join([f"|{key}|{value}|" for key, value in vars(self.params).items()])),
+            )
 
         self.save_config = "reset" if self.params.save_every_reset else "step"
 

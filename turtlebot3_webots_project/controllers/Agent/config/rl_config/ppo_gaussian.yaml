@@ -26,7 +26,7 @@ gamma: 0.995
 num_steps: 2560
 
 #number of minibatches
-num_minibatches: 128
+num_minibatches: 64
 
 #number of epoch (default:10, try with num : 1-20)
 num_epoch: 10
@@ -57,7 +57,7 @@ clip_coef: 0.2
 clip_vloss: False
 
 #Entropy Coefficient 
-ent_coef: 0.005
+ent_coef: 0.01
 
 #Value coefficient for update policy
 vf_coef: 0.5
@@ -70,7 +70,7 @@ max_grad_norm: 1.0
 rpo_alpha: False
 
 #target KL Divergence 
-target_kl: 0.15
+target_kl: 0.015
 
 #use tanh output
 use_tanh_output: False

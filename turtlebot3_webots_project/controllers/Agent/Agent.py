@@ -332,7 +332,7 @@ def customRLProgram(
     }
 
     scene_configuration = {
-        "change_scene_every_goal_reach": 5,  # change the scenario every n goal reach
+        "change_scene_every_goal_reach": 2,  # change the scenario every n goal reach
         "scene_start_from": 0,  # scene start from n
         "random_start": False,  # whether start from x and y coordinate random or not
         "max_steps": 1280,  # set to maximum integer value,
@@ -587,10 +587,10 @@ if __name__ == "__main__":
     # using exp_name matched the configuration on config folder
     # customRLProgram(algo="SAC",
     #                 exp_name="rl_sac")
-    #customRLProgram(algo="PPO", exp_name="rl_ppo_gaussian")
+    customRLProgram(algo="PPO", exp_name="rl_ppo_gaussian")
     # customRLProgram(algo="PPO",
     #                 exp_name="rl_ppo_clippedgaussian")
 
     # Here we go, Custom IRL Program (AIRL)
     # CustomAIRLProgram(exp_name="airl")
-    TryConventionalMethod()
+    # TryConventionalMethod()
