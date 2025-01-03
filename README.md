@@ -9,7 +9,7 @@ Works on the Following Ubuntu Version :
 Project Progress : 
 - [x] Reinforcement Learning based on Modified [Clean's RL Repo (PPO)](https://github.com/Josh00-Lu/cleanrl/blob/sync/cleanrl/ppo_continuous_action_truncted.py) and KL-rollback [code](https://wandb.ai/cleanrl/ppo-kle/runs/pozrklmi/files/code/cleanrl/ppo_continuous_action.py)
 - [x] Reinforcement Learning based on Modified [Clean's RL Repo](https://github.com/vwxyzjn/cleanrl/blob/master/cleanrl/sac_continuous_action.py), [Stable-Baselines3 (SAC)](https://github.com/DLR-RM/stable-baselines3/blob/master/stable_baselines3/sac/policies.py) and NN Model using [SimBa Network](https://github.com/SonyResearch/simba)
-- [x] (Bonus) Pendulum application for testing rl algorithm workable inside the Agent controller folder named "[pendulum_rl_test.py](./turtlebot3_webots_project/controllers/Agent/pendulum_rl_test.py)"
+- [x] (Bonus) Pendulum application for testing RL algorithm workable inside the Agent controller folder named "[pendulum_rl_test.py](./turtlebot3_webots_project/controllers/Agent/pendulum_rl_test.py)"
 - [x] (Bonus) Adding New Policy Clipped Gaussian based on [CAPG](https://github.com/pfnet-research/capg) in [this file](./turtlebot3_webots_project/controllers/Agent/library/custom_rl_algo.py#L44)
 - [ ] Adversarial Inverse Reinforcement Learning (AIRL) based on [Toshikawa Repo](https://github.com/toshikwa/gail-airl-ppo.pytorch)
 - [ ] Try With Modified AIRL (Confidence Aware IL) based on [Stanford-ILIAD](https://github.com/Stanford-ILIAD/Confidence-Aware-Imitation-Learning)
@@ -20,7 +20,7 @@ Project Progress :
 - See the releases package from Webots Github, https://github.com/cyberbotics/webots/releases
 ## 2. <strong>Install Required Package (ROS2, Protobuf, ZMQ, and pip dependencies)</strong>
 
-- First, Installing ROS2 Package. Actually, ROS2 package is optional (because the ros2 package is only used for visualization of robot movement to rviz). The code works in ROS2 Humble and Jazzy. To install ROS2 Humble, see https://docs.ros.org/en/humble/Installation.html. Otherwise, to install ROS2 Jazzy, see https://docs.ros.org/en/jazzy/Installation.html.
+- First, Installing ROS2 Package. Actually, the ROS2 package is optional (because the ROS2 package is only used for visualization of robot movement to rviz). The code works in ROS2 Humble and Jazzy. To install ROS2 Humble, see https://docs.ros.org/en/humble/Installation.html. Otherwise, to install ROS2 Jazzy, see https://docs.ros.org/en/jazzy/Installation.html.
   
 - Second, Installing Protobuf the base message communication between RL Agent and Turtlebot3 Robot.
 
@@ -42,13 +42,13 @@ Project Progress :
   sudo make install
   ```
 
-- Third, Installing ZMQ library for c++. The communication protocol to communicate RL Agent (Python) to Turtlebot3 Robot (C++).
+- Third, Installing the ZMQ library for C++. The communication protocol to communicate RL Agent (Python) to Turtlebot3 Robot (C++).
   ```bash
   #(for Ubuntu)
   sudo apt install libzmq3-dev
   ```
 
-- Finally, Installing python dependencies. The code works in Python 3.10 and above. Please make sure you use virtualenv so that there is no conflict with other packages.
+- Finally, Installing python dependencies. The code works in Python 3.10 and above. Please make sure you use virtualenv to avoid conflict with other packages.
   ```bash
   pip install -r requirements.txt
 
@@ -63,7 +63,7 @@ Project Progress :
   ```
 
 ## 3. <Strong>Colcon build on ros2_irl_ws folder </strong>
-   Build with "Colcon build" command on ros2_irl_ws folder and then source the local_setup.sh/.zsh from install folder.
+   Build with "Colcon build" command on ros2_irl_ws folder and then source the local_setup.sh/.zsh from the install folder.
    ```bash
    # enter the folder 
    cd ros2_irl_ws
@@ -80,10 +80,13 @@ Project Progress :
    ```
 
 ## 4. <Strong>Run Program</strong>
-  - You can run simulation on Webots with world on folder ./turtlebot3_webots_project/worlds and then run the simulation through webots simulator.
+  - You can run simulation on Webots with world on folder ./turtlebot3_webots_project/worlds and then simulate on Webots simulator.
   ```bash
   # (example with no rendering)
   webots turtlebot3_webots_project/worlds/Amazon_warehouse_world_0_375_fix.wbt --no-rendering
+
+  # (example without run the webots window and then mode fast. You can change to realtime (fast -> realtime)
+  xvfb-run webots --stdout --stderr --batch --mode=fast turtlebot3_webots_project/worlds/Amazon_warehouse_world_0_375_fix.wbt
   ```
   When the simulation start, the Agent will start automatically.
   - Lastly, run the Turtlebot3 Robot Programs using Ros2 Launch
