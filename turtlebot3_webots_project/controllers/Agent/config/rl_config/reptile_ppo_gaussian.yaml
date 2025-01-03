@@ -8,7 +8,7 @@ save_every_step: False
 save_step: 20
 
 #save path
-save_path: ./models/RL_PPO_Gaussian
+save_path: ./models/Reptile_RL_PPO_Gaussian
 
 #seed
 seed: 1
@@ -28,14 +28,23 @@ num_steps: 2560
 #number of minibatches
 num_minibatches: 64
 
-#number of epoch (default:10, try with num : 1-20)
-num_epoch: 10
+#inner epoch of ppo
+ppo_num_epoch: 5
 
-# optimizer Adam
-optimizer:
-  _target_: torch.optim.adam.Adam
-  lr: 1.5e-4
-  eps: 1e-8
+#meta inner epoch update (k)
+inner_loop_epoch: 3
+
+#meta inner learning rate
+meta_inner_lr: 5e-4
+
+#meta outer learning rate
+meta_outer_lr: 1e-3
+
+# optimizer Adam (Reptile Default SGD)
+#optimizer:
+#  _target_: torch.optim.adam.Adam
+#  lr: 1.5e-4
+#  eps: 1e-8
 #  _target_: library.upgd.UPGD
 
 #activation function

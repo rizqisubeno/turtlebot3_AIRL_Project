@@ -332,7 +332,9 @@ def customRLProgram(
     }
 
     scene_configuration = {
-        "change_scene_every_goal_reach": 2,  # change the scenario every n goal reach
+        "change_scene_every_goal_reach": 0,  # change the scenario every n goal reach
+        # number of episode rollout each scene (6 get from 2 every 1 task times 3 from meta inner epoch if use meta rl (reptile algorithm))
+        "episode_num_rollout_each_scene": 6,   
         "scene_start_from": 0,  # scene start from n
         "random_start": False,  # whether start from x and y coordinate random or not
         "max_steps": 1280,  # set to maximum integer value,
@@ -354,10 +356,55 @@ def customRLProgram(
 
     if algo == "PPO":
         model = PPO(env=roboAgent, config_path="./config", config_name=exp_name, bypass_class_cfg=False)
-        model.train(total_timesteps=int(256e4))
+        if ("reptile" in exp_name):
+            model.reptile_train(total_timesteps=int(256e4))
+        else:
+            model.train(total_timesteps=int(256e4))
     elif algo == "SAC":
         model = SAC(env=roboAgent, config_path="./config", config_name=exp_name)
         model.train(total_timesteps=int(256e4))
+    else:
+        sys.exit("Algorithm not found")
+
+
+def TestCustomRLProgram(
+    algo: str,
+    exp_name: str,
+    ):
+    agent_settings = {
+        "goal_dist": 0.11,  # in meter
+        "collision_dist": 0.12,  # in meter
+        "lidar_for_state": 9,  # number of state lidar read (default=10)
+        "gamma": 0.995,
+    }
+
+    scene_configuration = {
+        "change_scene_every_goal_reach": 0,  # change the scenario every n goal reach
+        "scene_start_from": 0,  # scene start from n
+        "random_start": False,  # whether start from x and y coordinate random or not
+        "max_steps": 1280,  # set to maximum integer value,
+        # set "TeacherExp3" if want TeacherExp3 Curriculum or "classic" to classical change new task based scenario list
+        "scene_change_config": "classic",    
+    }
+
+    roboAgent = gym.vector.SyncVectorEnv(
+        [
+            lambda: Agent(
+                name_exp=exp_name,
+                agent_settings=agent_settings,
+                scene_configuration=scene_configuration,
+                fixed_steps=False,
+                logging_reward=True,
+            )
+        ]
+    )
+
+    if algo == "PPO":
+        model = PPO(env=roboAgent, config_path="./config", config_name=exp_name, bypass_class_cfg=False)
+        model.eval_once(iter=100)
+    elif algo == "SAC":
+        model = SAC(env=roboAgent, config_path="./config", config_name=exp_name)
+        model.eval_once(iter=100)
     else:
         sys.exit("Algorithm not found")
 
@@ -587,7 +634,8 @@ if __name__ == "__main__":
     # using exp_name matched the configuration on config folder
     # customRLProgram(algo="SAC",
     #                 exp_name="rl_sac")
-    customRLProgram(algo="PPO", exp_name="rl_ppo_gaussian")
+    customRLProgram(algo="PPO", exp_name="reptile_rl_ppo_gaussian")
+    # TestCustomRLProgram(algo="PPO", exp_name="rl_ppo_gaussian")
     # customRLProgram(algo="PPO",
     #                 exp_name="rl_ppo_clippedgaussian")
 

@@ -177,6 +177,13 @@ class Agent(gym.Env):
         # last step each scenario reward and success rate for debugging
         self.last_step_graph = np.zeros(self.max_scenario, dtype=np.int_)
 
+        if not hasattr(self.scene_cfg, 'episode_num_rollout_each_scene'):
+            logger("error", "TB3Py_Init", "episode_num_rollout_each_scene not defined in scene configuration")
+            sys.exit(1)
+        else:
+            logger("info", "TB3Py_Init", f"episode_num_rollout_each_scene: {self.scene_cfg.episode_num_rollout_each_scene}")
+            self.episode_num_rollout_count = 0
+
     def read_webots_node(self, verbose=False):
         head_name = "TB3Py_read_node"
         info_node = self.agent.getFromDef("WorldInfo")
@@ -421,6 +428,11 @@ class Agent(gym.Env):
             self.first_step = False
             self.agent.step(self.timestep)
             time.sleep(0.1)
+            if hasattr(self.scene_cfg, 'episode_num_rollout_each_scene'):
+                self.episode_num_rollout_count = 0
+        else:
+            if hasattr(self.scene_cfg, 'episode_num_rollout_each_scene'):
+                self.episode_num_rollout_count += 1
         while (
             "start" not in self.agent_publisher.subscriptions
             or "step" not in self.agent_publisher.subscriptions
@@ -428,13 +440,20 @@ class Agent(gym.Env):
             self.agent_publisher.receiveSubscriptions()
 
         if "classic" in self.scene_cfg.scene_change_config:   
-            if (self.success_counter >= self.scene_cfg.change_scene_every_goal_reach
-                and self.eval == False):
-                self.success_counter = 0
-                self.scenario_idx += 1
-                if self.scenario_idx >= max_robot_scenario:
-                    self.scenario_idx = 0
-                    self.scenario_reach_end = True
+
+            if not hasattr(self.scene_cfg, 'episode_num_rollout_each_scene'):
+                logger("error", "TB3Py_Init", "episode_num_rollout_each_scene not defined in scene configuration")
+                sys.exit(1)
+            else:  
+                if (self.episode_num_rollout_count == self.scene_cfg.episode_num_rollout_each_scene):
+                    self.episode_num_rollout_count = 0
+                    if (self.success_counter >= self.scene_cfg.change_scene_every_goal_reach
+                        and self.eval == False):
+                        self.success_counter = 0
+                        self.scenario_idx += 1
+                        if self.scenario_idx >= max_robot_scenario:
+                            self.scenario_idx = 0
+                            self.scenario_reach_end = True
         elif "TeacherExp3" in self.scene_cfg.scene_change_config:
             #the value passed by custom rl algorithm
             self.scenario_idx = self.next_step_scenario_idx

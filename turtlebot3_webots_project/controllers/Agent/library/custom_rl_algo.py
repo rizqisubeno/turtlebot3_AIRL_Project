@@ -297,8 +297,10 @@ class PPO():
                                          device=self.device).to(self.device)
 
         # self.optimizer = Adam(self.agent.parameters(), lr=self.params.learning_rate, eps=1e-8)
-        self.optimizer = instantiate(
-            self.params.optimizer, params=self.agent.parameters())
+        # not defined if using reptile-ppo
+        if ("reptile" not in self.params.exp_name):
+            self.optimizer = instantiate(
+                self.params.optimizer, params=self.agent.parameters())
         if (self.params.use_icm):
             self.ICM = ICM(observation_shape=self.env.single_observation_space.shape[0],
                            action_shape=self.env.single_action_space.shape[0],
@@ -416,6 +418,59 @@ class PPO():
         self.env.envs[0].writer.close()
         self.env.close()
 
+    def reptile_train(self,
+                      total_timesteps: Optional[int] = int(1e6)):
+        
+        self.num_iterations = int(total_timesteps // self.batch_size)
+
+        if hasattr(self.env.envs[0], 'curriculum'):
+            self.logger.print("info", "Curriculum Learning Used on Env")
+            self.weights_all = np.empty((self.num_iterations, max_robot_scenario))
+            self.arm_probs_all = np.empty((self.num_iterations, max_robot_scenario))
+
+        for iteration in range(1, self.num_iterations + 1):
+            # Annealing the rate if instructed to do so.
+            if self.params.anneal_lr:
+                frac = 1.0 - (iteration - 1.0) / self.num_iterations
+                lrnow = frac * self.params.learning_rate
+                self.optimizer.param_groups[0]["lr"] = lrnow
+
+            # read weight before rollout and update on inner loop
+            weight_before = deepcopy(self.agent.state_dict())
+            for ep in range(self.params.inner_loop_epoch):
+                if (iteration == 1 and ep==0):
+                    # if teacherexp3 used use this
+                    if hasattr(self.env.envs[0], 'curriculum'):
+                        # pull an arm
+                        task = self.env.envs[0].curriculum.get_task()
+                        self.logger.print("info", f"Task change to : {task}")
+
+                    # TRY NOT TO MODIFY: start the game
+                    self.global_step = 0
+                    self.start_time = time.time()
+                    next_ob, _ = self.env.reset(seed=self.params.seed)
+                    next_ob = torch.Tensor(next_ob).to(self.device)
+                    self.temp_next_ob = next_ob
+                    self.do_rollout(iteration,
+                                    start_obs=next_ob)
+                else:
+                    self.do_rollout(iteration,)
+
+                if (self.params.use_icm):
+                    self.update_icm()
+
+                batch_data = self.calculate_gae()
+                self.meta_update_ppo(batch_data)
+            #applying soft update meta rl reptile
+
+            self.logger.print("info", f"applying soft update from task {self.env.envs[0].scenario_idx}")  # not using +1 because the task scenario idx already updated after rollout
+            outerstepsize = self.params.meta_outer_lr * (1 - iteration / self.num_iterations) # linear schedule
+            self.agent.load_state_dict({name: weight_before[name] + outerstepsize * (self.agent.state_dict()[name] - weight_before[name]) for name in weight_before})
+            self.env.envs[0].writer.add_scalar("charts/learning_rate", outerstepsize, self.global_step)
+
+        self.env.envs[0].writer.close()
+        self.env.close()
+
     def do_rollout(self,
                    iteration,
                    start_obs: Optional[torch.Tensor] = None):
@@ -452,6 +507,7 @@ class PPO():
 
             # Correct next observation (for vec gym)
             real_next_ob = next_ob.copy()
+            assert isinstance(next_truncation, np.ndarray)
             for idx, trunc in enumerate(next_truncation):
                 if trunc:
                     real_next_ob[idx] = info["final_observation"][idx]
@@ -479,7 +535,7 @@ class PPO():
                     last_task = self.env.envs[0].scenario_idx
                     task = self.env.envs[0].curriculum.get_task()
                     self.env.envs[0].next_step_scenario_idx = task
-                    self.logger.print("info", f"2Task change to : {task}")
+                    # self.logger.print("info", f"2Task change to : {task}")
                     
                     #resseting variable next step is done
                     self.env.envs[0].next_step_is_done = False
@@ -666,7 +722,7 @@ class PPO():
 
                 entropy_loss = entropy.mean()
                 loss = pg_loss - self.params.ent_coef * \
-                    entropy_loss + v_loss * self.params.vf_coef
+                    entropy_loss + v_loss * self.params.vf_coef + 0.9 * approx_kl
 
                 self.optimizer.zero_grad()
                 loss.backward()
@@ -721,6 +777,126 @@ class PPO():
             self.env.envs[0].writer.add_scalar(
                 f"charts/log_std_{i}", self.agent.actor_logstd[0][i].item(), self.global_step)
 
+    def meta_update_ppo(self,
+                        batch_data):
+        b_obs = batch_data[0]
+        b_actions = batch_data[1]
+        b_logprobs = batch_data[2]
+        b_advantages = batch_data[3]
+        b_returns = batch_data[4]
+        b_values = batch_data[5]
+
+        b_inds = np.arange(self.batch_size)
+        clipfracs = []
+        for _ in range(self.params.ppo_num_epoch):
+            np.random.shuffle(b_inds)
+            self.target_agent.load_state_dict(self.agent.state_dict())
+            approx_kl_list = []
+            for start in range(0, self.batch_size, self.minibatch_size):
+                end = start + self.minibatch_size
+                mb_inds = b_inds[start:end]
+                # print(f"{b_actions[mb_inds]=}")
+                _, newlogprob, entropy, newvalue = self.agent.get_action_and_value(
+                    b_obs[mb_inds], b_actions[mb_inds])
+                logratio = newlogprob - b_logprobs[mb_inds]
+                ratio = logratio.exp()
+
+                with torch.no_grad():
+                    # calculate approx_kl http://joschu.net/blog/kl-approx.html
+                    old_approx_kl = (-logratio).mean()
+                    approx_kl = ((ratio - 1) - logratio).mean()
+                    clipfracs += [((ratio - 1.0).abs() >
+                                   self.params.clip_coef).float().mean().item()]
+
+                approx_kl_list.append(approx_kl.item())
+
+                mb_advantages = b_advantages[mb_inds]
+                if self.params.norm_adv:
+                    mb_advantages = (
+                        mb_advantages - mb_advantages.mean()) / (mb_advantages.std() + 1e-8)
+
+                # Policy loss
+                pg_loss1 = -mb_advantages * ratio
+                pg_loss2 = -mb_advantages * \
+                    torch.clamp(ratio, 1 - self.params.clip_coef,
+                                1 + self.params.clip_coef)
+                pg_loss = torch.max(pg_loss1, pg_loss2).mean()
+
+                # Value loss
+                newvalue = newvalue.view(-1)
+                if self.params.clip_vloss:
+                    v_loss_unclipped = (newvalue - b_returns[mb_inds]) ** 2
+                    v_clipped = b_values[mb_inds] + torch.clamp(
+                        newvalue - b_values[mb_inds],
+                        -self.params.clip_coef,
+                        self.params.clip_coef,
+                    )
+                    v_loss_clipped = (v_clipped - b_returns[mb_inds]) ** 2
+                    v_loss_max = torch.max(v_loss_unclipped, v_loss_clipped)
+                    v_loss = 0.5 * v_loss_max.mean()
+                else:
+                    v_loss = 0.5 * \
+                        ((newvalue - b_returns[mb_inds]) ** 2).mean()
+
+                entropy_loss = entropy.mean()
+                loss = pg_loss - self.params.ent_coef * \
+                    entropy_loss + v_loss * self.params.vf_coef + 0.9 * approx_kl
+
+                # self.optimizer.zero_grad()
+                loss.backward()
+                nn.utils.clip_grad_norm_(
+                    self.agent.parameters(), self.params.max_grad_norm)
+                # self.optimizer.step() (not used optimizer for reptile)
+                for param in self.agent.parameters():
+                    param.data -= self.params.meta_inner_lr * param.grad.data
+
+            # self.logger.print("hidden", "RPO", f"approx kl max:{np.max(approx_kl_list):.3f}, min:{np.min(approx_kl_list):.7f}")
+            if self.params.target_kl is not None:
+                if approx_kl > self.params.target_kl and self.params.kle_stop:
+                    self.logger.print(
+                        "err", "approx kl reach target, stopping update")
+                    break
+
+                # adding kle_rollback if needed
+                if self.params.kle_rollback:
+                    if (b_logprobs[mb_inds] - self.agent.get_action_and_value(b_obs[mb_inds], b_actions[mb_inds])[1]).mean() > self.params.target_kl:
+                        self.agent.load_state_dict(
+                            self.target_agent.state_dict())
+                        self.logger.print(
+                            "err", "approx kl reach target, rollback the model")
+                        break
+        # print(f"{self.agent.actor_logstd=}")
+
+        y_pred, y_true = b_values.cpu().numpy(), b_returns.cpu().numpy()
+        var_y = np.var(y_true)
+        explained_var = np.nan if var_y == 0 else 1 - \
+            np.var(y_true - y_pred) / var_y
+
+        # TRY NOT TO MODIFY: record rewards for plotting purposes
+        # self.env.envs[0].writer.add_scalar(
+        #     "charts/learning_rate", self.optimizer.param_groups[0]["lr"], self.global_step)
+        self.env.envs[0].writer.add_scalar(
+            "losses/value_loss", v_loss.item(), self.global_step)
+        self.env.envs[0].writer.add_scalar(
+            "losses/policy_loss", pg_loss.item(), self.global_step)
+        self.env.envs[0].writer.add_scalar(
+            "losses/entropy", entropy_loss.item(), self.global_step)
+        self.env.envs[0].writer.add_scalar(
+            "losses/old_approx_kl", old_approx_kl.item(), self.global_step)
+        self.env.envs[0].writer.add_scalar(
+            "losses/approx_kl", approx_kl.item(), self.global_step)
+        self.env.envs[0].writer.add_scalar(
+            "losses/clipfrac", np.mean(clipfracs), self.global_step)
+        self.env.envs[0].writer.add_scalar(
+            "losses/explained_variance", explained_var, self.global_step)
+        # print("SPS:", int(self.global_step / (time.time() - start_time)))
+        self.env.envs[0].writer.add_scalar(
+            "charts/SPS", int(self.global_step / (time.time() - self.start_time)), self.global_step)
+        # adding logging for log std
+        for i in range(self.agent.actor_logstd.shape[1]):
+            self.env.envs[0].writer.add_scalar(
+                f"charts/log_std_{i}", self.agent.actor_logstd[0][i].item(), self.global_step)
+
     def eval_once(self, iter):
         # load model based on last training
         self.agent.load_model(path=self.params.save_path,
@@ -747,7 +923,8 @@ class PPO():
                             "charts/eval/episodic_return", info["episode"]["r"], global_step)
                         self.env.envs[0].writer.add_scalar(
                             "charts/eval/episodic_length", info["episode"]["l"], global_step)
-                        isExit = True
+                        if self.env.envs[0].scenario_reach_end==True:
+                            isExit = True
 
         self.env.close()
 
