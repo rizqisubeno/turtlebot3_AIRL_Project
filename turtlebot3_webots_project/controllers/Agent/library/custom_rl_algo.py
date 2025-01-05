@@ -843,6 +843,7 @@ class PPO():
                     entropy_loss + v_loss * self.params.vf_coef + 0.9 * approx_kl
 
                 # self.optimizer.zero_grad()
+                self.agent.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(
                     self.agent.parameters(), self.params.max_grad_norm)

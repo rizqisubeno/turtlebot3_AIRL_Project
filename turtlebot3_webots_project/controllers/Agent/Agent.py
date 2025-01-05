@@ -333,8 +333,8 @@ def customRLProgram(
 
     scene_configuration = {
         "change_scene_every_goal_reach": 0,  # change the scenario every n goal reach
-        # number of episode rollout each scene (6 get from 2 every 1 task times 3 from meta inner epoch if use meta rl (reptile algorithm))
-        "episode_num_rollout_each_scene": 6,   
+        # default number of episode rollout each scene (6 get from 2 every 1 task times 3 from meta inner epoch if use meta rl (reptile algorithm))
+        "episode_num_rollout_each_scene": 4,   
         "scene_start_from": 0,  # scene start from n
         "random_start": False,  # whether start from x and y coordinate random or not
         "max_steps": 1280,  # set to maximum integer value,

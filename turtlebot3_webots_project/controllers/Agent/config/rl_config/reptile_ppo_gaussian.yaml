@@ -23,13 +23,13 @@ torch_deterministic: True
 gamma: 0.995
 
 #number steps rollout before update policy (PPO)
-num_steps: 2560
+num_steps: 1280
 
 #number of minibatches
 num_minibatches: 64
 
 #inner epoch of ppo
-ppo_num_epoch: 5
+ppo_num_epoch: 1
 
 #meta inner epoch update (k)
 inner_loop_epoch: 3
