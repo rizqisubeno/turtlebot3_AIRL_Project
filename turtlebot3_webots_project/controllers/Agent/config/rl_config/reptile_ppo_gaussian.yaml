@@ -26,7 +26,7 @@ gamma: 0.995
 num_steps: 1280
 
 #number of minibatches
-num_minibatches: 64
+num_minibatches: 128
 
 #inner epoch of ppo
 ppo_num_epoch: 1
@@ -34,17 +34,14 @@ ppo_num_epoch: 1
 #meta inner epoch update (k)
 inner_loop_epoch: 3
 
-#meta inner learning rate
-meta_inner_lr: 5e-4
-
 #meta outer learning rate
-meta_outer_lr: 1e-3
+meta_outer_lr: 0.1
 
-# optimizer Adam (Reptile Default SGD)
-#optimizer:
-#  _target_: torch.optim.adam.Adam
-#  lr: 1.5e-4
-#  eps: 1e-8
+# optimizer Adam (Reptile Able using this for inner loop)
+optimizer:
+  _target_: torch.optim.adam.Adam
+  lr: 2e-4
+  eps: 1e-8
 #  _target_: library.upgd.UPGD
 
 #activation function

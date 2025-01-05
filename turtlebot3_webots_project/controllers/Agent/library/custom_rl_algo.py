@@ -297,10 +297,7 @@ class PPO():
                                          device=self.device).to(self.device)
 
         # self.optimizer = Adam(self.agent.parameters(), lr=self.params.learning_rate, eps=1e-8)
-        # not defined if using reptile-ppo
-        if ("reptile" not in self.params.exp_name):
-            self.optimizer = instantiate(
-                self.params.optimizer, params=self.agent.parameters())
+        self.optimizer = instantiate(self.params.optimizer, params=self.agent.parameters())
         if (self.params.use_icm):
             self.ICM = ICM(observation_shape=self.env.single_observation_space.shape[0],
                            action_shape=self.env.single_action_space.shape[0],
@@ -465,7 +462,13 @@ class PPO():
 
             self.logger.print("info", f"applying soft update from task {self.env.envs[0].scenario_idx}")  # not using +1 because the task scenario idx already updated after rollout
             outerstepsize = self.params.meta_outer_lr * (1 - iteration / self.num_iterations) # linear schedule
-            self.agent.load_state_dict({name: weight_before[name] + outerstepsize * (self.agent.state_dict()[name] - weight_before[name]) for name in weight_before})
+            weight_after = {name: param.clone().detach() for name, param in self.agent.named_parameters()}
+            for name, param in self.agent.named_parameters():
+                weight_before[name] += outerstepsize * (weight_after[name] - weight_before[name])
+            # self.agent.load_state_dict({name: weight_before[name] + outerstepsize * (self.agent.state_dict()[name] - weight_before[name]) for name in weight_before})
+            for name, param in self.agent.named_parameters():
+                param.data.copy_(weight_before[name])
+
             self.env.envs[0].writer.add_scalar("charts/learning_rate", outerstepsize, self.global_step)
 
         self.env.envs[0].writer.close()
@@ -842,14 +845,11 @@ class PPO():
                 loss = pg_loss - self.params.ent_coef * \
                     entropy_loss + v_loss * self.params.vf_coef + 0.9 * approx_kl
 
-                # self.optimizer.zero_grad()
-                self.agent.zero_grad()
+                self.optimizer.zero_grad()
                 loss.backward()
                 nn.utils.clip_grad_norm_(
                     self.agent.parameters(), self.params.max_grad_norm)
-                # self.optimizer.step() (not used optimizer for reptile)
-                for param in self.agent.parameters():
-                    param.data -= self.params.meta_inner_lr * param.grad.data
+                self.optimizer.step() 
 
             # self.logger.print("hidden", "RPO", f"approx kl max:{np.max(approx_kl_list):.3f}, min:{np.min(approx_kl_list):.7f}")
             if self.params.target_kl is not None:
