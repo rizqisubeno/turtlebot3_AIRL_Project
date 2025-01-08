@@ -337,7 +337,11 @@ def customRLProgram(
     scene_configuration = {
         "change_scene_every_goal_reach": 0,  # change the scenario every n goal reach
         # default number of episode rollout each scene (3 get from every 1 task times rollout and 3 from meta inner epoch if use meta rl (reptile algorithm))
+<<<<<<< Updated upstream
         "episode_num_rollout_each_scene": episode_num_rollout_each_scene,   
+=======
+        "episode_num_rollout_each_scene": 5,   
+>>>>>>> Stashed changes
         "scene_start_from": 0,  # scene start from n
         "random_start": False,  # whether start from x and y coordinate random or not
         "max_steps": 1280,  # set to maximum integer value,
@@ -386,6 +390,7 @@ def TestCustomRLProgram(
 
     scene_configuration = {
         "change_scene_every_goal_reach": 0,  # change the scenario every n goal reach
+        "episode_num_rollout_each_scene": 1,  
         "scene_start_from": 0,  # scene start from n
         "random_start": False,  # whether start from x and y coordinate random or not
         "max_steps": 1280,  # set to maximum integer value,
@@ -407,7 +412,7 @@ def TestCustomRLProgram(
 
     if algo == "PPO":
         model = PPO(env=roboAgent, config_path="./config", config_name=exp_name, bypass_class_cfg=False)
-        model.eval_once(iter=100)
+        model.eval_once(iter=259)
     elif algo == "SAC":
         model = SAC(env=roboAgent, config_path="./config", config_name=exp_name)
         model.eval_once(iter=100)
@@ -640,6 +645,7 @@ if __name__ == "__main__":
     # using exp_name matched the configuration on config folder
     # customRLProgram(algo="SAC",
     #                 exp_name="rl_sac")
+<<<<<<< Updated upstream
     # customRLProgram(algo="PPO", 
     #                 exp_name="reptile_rl_ppo_gaussian",
     #                 episode_num_rollout_each_scene=3)
@@ -647,6 +653,10 @@ if __name__ == "__main__":
                     exp_name="rl_sd3",
                     episode_num_rollout_each_scene=2)
     # TestCustomRLProgram(algo="PPO", exp_name="rl_ppo_gaussian")
+=======
+    #customRLProgram(algo="PPO", exp_name="reptile_rl_ppo_gaussian")
+    TestCustomRLProgram(algo="PPO", exp_name="reptile_rl_ppo_gaussian")
+>>>>>>> Stashed changes
     # customRLProgram(algo="PPO",
     #                 exp_name="rl_ppo_clippedgaussian")
 

@@ -26,16 +26,16 @@ gamma: 0.995
 num_steps: 1280
 
 #number of minibatches
-num_minibatches: 128
+num_minibatches: 64
 
 #inner epoch of ppo
 ppo_num_epoch: 1
 
 #meta inner epoch update (k)
-inner_loop_epoch: 3
+inner_loop_epoch: 5
 
 #meta outer learning rate
-meta_outer_lr: 0.1
+meta_outer_lr: 0.4
 
 # optimizer Adam (Reptile Able using this for inner loop)
 optimizer:
