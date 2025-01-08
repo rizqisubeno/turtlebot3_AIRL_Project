@@ -16,12 +16,14 @@ import gymnasium as gym
 import numpy as np
 import scipy.signal as signal
 import torch as th
-from library.custom_rl_algo import PPO, SAC
+from library.PPO_rl import PPO
+from library.SAC_rl import SAC
+from library.SD3_rl import SD3
 
 # from library.BC_Net import modelNet
 # TB3 Agent Core
 from library.Imitation.AIRL import AIRL
-from library.tb3_agent import Agent, logger
+from library.tb3_Env import TB3Env, logger
 from library.tb3_agent_callback import Eval_and_Save
 from library.tb3_agent_wrapper import JoystickEnv, TB3_Agent_Demo
 from numpy.typing import NDArray
@@ -239,7 +241,7 @@ def RL_Training(algo_mode: str = "PPO"):
         "every": {"timestep": 1e5},
     }
 
-    roboAgent = Agent(
+    roboAgent = TB3Env(
         name_exp="sb3_rl_training",
         agent_settings=agent_settings,
         scene_configuration=scene_configuration,
@@ -301,7 +303,7 @@ def agent_checker():
         "max_steps": 1024,  # set to maximum integer value
     }
 
-    roboAgent = Agent(
+    roboAgent = TB3Env(
         name_exp="agent_checker",
         agent_settings=agent_settings,
         scene_configuration=scene_configuration,
@@ -323,6 +325,7 @@ def agent_checker():
 def customRLProgram(
     algo: str,
     exp_name: str,
+    episode_num_rollout_each_scene: int = 3,
     ):
     agent_settings = {
         "goal_dist": 0.11,  # in meter
@@ -334,7 +337,7 @@ def customRLProgram(
     scene_configuration = {
         "change_scene_every_goal_reach": 0,  # change the scenario every n goal reach
         # default number of episode rollout each scene (3 get from every 1 task times rollout and 3 from meta inner epoch if use meta rl (reptile algorithm))
-        "episode_num_rollout_each_scene": 3,   
+        "episode_num_rollout_each_scene": episode_num_rollout_each_scene,   
         "scene_start_from": 0,  # scene start from n
         "random_start": False,  # whether start from x and y coordinate random or not
         "max_steps": 1280,  # set to maximum integer value,
@@ -344,11 +347,11 @@ def customRLProgram(
 
     roboAgent = gym.vector.SyncVectorEnv(
         [
-            lambda: Agent(
+            lambda: TB3Env(
                 name_exp=exp_name,
                 agent_settings=agent_settings,
                 scene_configuration=scene_configuration,
-                fixed_steps=True,
+                fixed_steps=False if "SAC" in algo else False if "SD3" in algo else True,
                 logging_reward=True,
             )
         ]
@@ -362,6 +365,9 @@ def customRLProgram(
             model.train(total_timesteps=int(256e4))
     elif algo == "SAC":
         model = SAC(env=roboAgent, config_path="./config", config_name=exp_name)
+        model.train(total_timesteps=int(256e4))
+    elif algo == "SD3":
+        model = SD3(env=roboAgent, config_path="./config", config_name=exp_name)
         model.train(total_timesteps=int(256e4))
     else:
         sys.exit("Algorithm not found")
@@ -389,7 +395,7 @@ def TestCustomRLProgram(
 
     roboAgent = gym.vector.SyncVectorEnv(
         [
-            lambda: Agent(
+            lambda: TB3Env(
                 name_exp=exp_name,
                 agent_settings=agent_settings,
                 scene_configuration=scene_configuration,
@@ -426,7 +432,7 @@ def CustomAIRLProgram(exp_name: str):
 
     roboAgent = gym.vector.SyncVectorEnv(
         [
-            lambda: Agent(name_exp=exp_name,
+            lambda: TB3Env(name_exp=exp_name,
                                    agent_settings=agent_settings,
                                    scene_configuration=scene_configuration,
                                    fixed_steps=True,
@@ -457,7 +463,7 @@ def check_demonstration(min_scene: int = 0, max_scene: int = 1):
         "max_steps": 1280,  # set to maximum integer value
     }
 
-    roboAgent = Agent(
+    roboAgent = TB3Env(
         name_exp="refine_demo_checker",
         agent_settings=agent_settings,
         scene_configuration=scene_configuration,
@@ -525,7 +531,7 @@ def TryConventionalMethod(save_path:str = "./goal_traj"):
         "scene_change_config": "classic",   
     }
 
-    roboAgent = Agent(name_exp="conventional_method",
+    roboAgent = TB3Env(name_exp="conventional_method",
                       agent_settings=agent_settings,
                       scene_configuration=scene_configuration,
                       fixed_steps=True,
@@ -634,7 +640,12 @@ if __name__ == "__main__":
     # using exp_name matched the configuration on config folder
     # customRLProgram(algo="SAC",
     #                 exp_name="rl_sac")
-    customRLProgram(algo="PPO", exp_name="reptile_rl_ppo_gaussian")
+    # customRLProgram(algo="PPO", 
+    #                 exp_name="reptile_rl_ppo_gaussian",
+    #                 episode_num_rollout_each_scene=3)
+    customRLProgram(algo="SD3", 
+                    exp_name="rl_sd3",
+                    episode_num_rollout_each_scene=2)
     # TestCustomRLProgram(algo="PPO", exp_name="rl_ppo_gaussian")
     # customRLProgram(algo="PPO",
     #                 exp_name="rl_ppo_clippedgaussian")

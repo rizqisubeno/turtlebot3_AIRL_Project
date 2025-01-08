@@ -1,0 +1,5 @@
+defaults:
+  - _self_
+  - rl_config: sd3
+
+exp_name: rl_sd3

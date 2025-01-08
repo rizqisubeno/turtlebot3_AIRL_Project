@@ -1,0 +1,85 @@
+name: SD3
+
+#choose one save every reset or save every n step
+save_every_reset: True
+save_every_step: False
+
+#optional if save every n step or reset true otherwise you can uncomment
+save_step: 20
+
+#save path
+save_path: ./models/RL_SD3
+
+#seed
+seed: 1
+
+#enable nvidia cuda processing
+cuda_en: 1
+
+#enable torch deterministic
+torch_deterministic: True
+
+#discount factor (gamma)
+# T = scene_configuration["max_steps"]
+# try heuristic like on paper https://arxiv.org/pdf/2310.16828.pdf
+# gamma = np.round(np.clip(((T/5)-1)/(T/5), a_min=0.950, a_max=0.995), decimals=3)
+gamma: 0.995
+
+#number rollout buffer
+replay_buffer_size: 1e6
+
+#target smoothing coefficient (default 0.005)
+tau: 0.005
+
+#number of batch size apply sample
+batch_size: 256
+
+#timestep to start learning (before this, sac will sample action to fill the buffer until timestep learning start)
+learning_starts: 2560
+
+#Actor Critic Parameter
+actor_hidden_size:
+- [400, 300]
+
+critic_hidden_size:
+- [400, 300]
+
+actor_activation_fn:
+  _target_: torch.nn.ReLU
+  
+critic_activation_fn:
+  _target_: torch.nn.ReLU
+
+#Actor Optimizer
+actor_optimizer:
+  _target_: torch.optim.adam.Adam
+  lr: 1e-3
+
+#Critic Optimizer
+critic_optimizer:
+  _target_: torch.optim.adam.Adam
+  lr: 1e-3
+
+#Beta param for softmax
+beta: 0.01
+
+#number noise samples
+num_noise_samples : 50
+
+# important sampling noise
+with_importance_sampling : False
+
+# Noise added to target policy during critic update
+policy_noise : 0.2
+
+#noise clipping (range to clip target policy noise)
+noise_clip : 0.5
+
+#the frequency of training policy (delayed)
+policy_frequency: 1
+
+#the frequency of updates for the target nerworks
+target_network_frequency: 2
+
+#Use Running Statistics Normalization (RSNorm->Running Mean Std)
+use_rsnorm: True

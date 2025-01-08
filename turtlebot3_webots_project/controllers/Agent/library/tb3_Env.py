@@ -63,7 +63,7 @@ def logger(mode: str = "", head_name: str | None = "", str_name: str = ""):
         )
 
 
-class Agent(gym.Env):
+class TB3Env(gym.Env):
     def __init__(
         self,
         name_exp,

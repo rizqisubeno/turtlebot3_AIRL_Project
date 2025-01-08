@@ -15,7 +15,7 @@ from omegaconf import OmegaConf
 from torch.optim.adam import Adam
 from torch.utils.tensorboard.writer import SummaryWriter
 
-from ..custom_rl_algo import PPO, Logger
+from ..PPO_rl import PPO, Logger
 
 
 def disable_gradient(network: nn.Module,

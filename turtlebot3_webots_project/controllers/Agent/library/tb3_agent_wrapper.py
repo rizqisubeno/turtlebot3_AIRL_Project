@@ -5,14 +5,14 @@ from typing import Optional
 
 import numpy as np
 from imitation.data import types
-from library.tb3_agent import Agent, logger
+from library.tb3_Env import TB3Env, logger
 
 # from scenario list
 from scenario_list import list_robot_scenario
 
 
 
-class TB3_Agent_Demo(Agent):
+class TB3_Agent_Demo(TB3Env):
     def __init__(self,
                  name_exp,
                  agent_settings,

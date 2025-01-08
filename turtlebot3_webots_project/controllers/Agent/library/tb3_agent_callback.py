@@ -2,7 +2,7 @@ import os
 from types import SimpleNamespace
 
 import numpy as np
-from library.tb3_agent import logger
+from library.tb3_Env import logger
 from stable_baselines3.common.callbacks import BaseCallback
 
 
